@@ -1,7 +1,10 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
-from app.api.deps import require_admin
+from app.api.deps import get_current_user, require_admin
+from app.db.session import get_db
+from app.models.user import User
 from app.services.data_storage_service import DataStorageService
 from app.services.ml_service import run_forecasting_pipeline, run_rfmq_pipeline
 from app.tasks.jobs import models_train_task
@@ -20,15 +23,23 @@ class TrainingRequest(BaseModel):
 
 
 @router.get("/datasets")
-async def list_datasets():
+async def list_datasets(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """List all uploaded datasets."""
-    return await DataStorageService.get_file_list()
+    return await DataStorageService.get_file_list(db=db, user_id=current_user.id)
 
 
 @router.post("/training/start")
-async def start_training(payload: TrainingRequest, background_tasks: BackgroundTasks):
+async def start_training(
+    payload: TrainingRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Start model training with specified parameters."""
-    dataset = await DataStorageService.get_file_data(payload.dataset_id)
+    dataset = await DataStorageService.get_file_data(payload.dataset_id, db=db, user_id=current_user.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
 

@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends
+from fastapi import HTTPException
+from httpx import HTTPStatusError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -11,6 +13,7 @@ from app.schemas.auth import (
     UserResponse,
 )
 from app.services.auth_service import login, register_user
+from app.services.supabase_client import supabase_client
 
 router = APIRouter()
 
@@ -26,9 +29,16 @@ async def register_route(payload: RegisterRequest, db: Session = Depends(get_db)
 
 
 @router.post("/refresh", response_model=TokenResponse)
-def refresh_route(payload: RefreshRequest):
-    # Simplified refresh flow for scaffold; production should validate token store.
-    return {"access_token": payload.refresh_token, "refresh_token": payload.refresh_token}
+async def refresh_route(payload: RefreshRequest):
+    try:
+        refreshed = await supabase_client.refresh_session(payload.refresh_token)
+        return {
+            "access_token": refreshed.get("access_token", ""),
+            "refresh_token": refreshed.get("refresh_token", payload.refresh_token),
+            "token_type": "bearer",
+        }
+    except HTTPStatusError as exc:
+        raise HTTPException(status_code=401, detail=f"Refresh failed: {exc.response.text}") from exc
 
 
 @router.get("/me", response_model=UserResponse)

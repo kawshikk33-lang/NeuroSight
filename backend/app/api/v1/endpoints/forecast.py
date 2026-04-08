@@ -2,8 +2,13 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, BackgroundTasks, File, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile
+from sqlalchemy.orm import Session
 
+from app.api.deps import get_current_user
+from app.db.session import get_db
+from app.models.analysis_history import AnalysisHistory
+from app.models.user import User
 from app.services.ml_service import parse_csv_bytes, train_forecast_model
 from app.tasks.jobs import forecast_batch_task, models_train_task
 
@@ -63,7 +68,11 @@ def predict(payload: dict):
 
 
 @router.post("")
-def forecast(payload: dict):
+def forecast(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     forecast_type = payload.get("forecast_type", "monthly")
     horizon = int(payload.get("horizon", 3))
     model = payload.get("model", "xgboost")
@@ -89,7 +98,7 @@ def forecast(payload: dict):
     else:
         trend = "Stable →"
 
-    return {
+    response_payload = {
         "forecast_type": forecast_type,
         "horizon": horizon,
         "model": model,
@@ -98,6 +107,16 @@ def forecast(payload: dict):
         "trend": trend,
         "series": series,
     }
+    history_entry = AnalysisHistory(
+        user_id=current_user.id,
+        file_id=None,
+        type="forecast",
+        input_config=payload,
+        result_data=response_payload,
+    )
+    db.add(history_entry)
+    db.commit()
+    return response_payload
 
 
 @router.post("/batch")

@@ -42,6 +42,16 @@ class SupabaseClient:
             response.raise_for_status()
             return response.json()
 
+    async def refresh_session(self, refresh_token: str) -> Dict[str, Any]:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{self.url}/auth/v1/token?grant_type=refresh_token",
+                json={"refresh_token": refresh_token},
+                headers=self.auth_headers,
+            )
+            response.raise_for_status()
+            return response.json()
+
     # Storage Methods
     async def upload_file(self, bucket: str, path: str, content: bytes, content_type: str = "text/csv") -> Dict[str, Any]:
         async with httpx.AsyncClient() as client:

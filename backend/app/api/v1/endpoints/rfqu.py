@@ -2,10 +2,14 @@ import csv
 from io import StringIO
 
 import pandas as pd
-from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
+from app.api.deps import get_current_user
+from app.db.session import get_db
+from app.models.user import User
 from app.services.data_storage_service import DataStorageService
 from app.services.ml_service import parse_csv_bytes, train_rfqu_model
 from app.tasks.jobs import rfqu_analyze_task
@@ -133,13 +137,22 @@ def _build_csv(rows: list[dict]) -> str:
 
 
 @router.post("/upload")
-async def upload(file: UploadFile = File(...)):
+async def upload(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only CSV files are allowed")
 
     try:
         content = await file.read()
-        file_info = await DataStorageService.save_uploaded_file(file.filename, content)
+        file_info = await DataStorageService.save_uploaded_file(
+            file.filename,
+            content,
+            db=db,
+            user_id=current_user.id,
+        )
         return {
             "status": "uploaded",
             "file": file_info,
@@ -152,8 +165,12 @@ async def upload(file: UploadFile = File(...)):
 
 
 @router.post("/mappings/validate")
-async def validate_mappings(payload: MappingPayload):
-    dataset = await DataStorageService.get_file_data(payload.dataset_id)
+async def validate_mappings(
+    payload: MappingPayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    dataset = await DataStorageService.get_file_data(payload.dataset_id, db=db, user_id=current_user.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
 
@@ -174,10 +191,15 @@ async def validate_mappings(payload: MappingPayload):
 
 
 @router.post("/analyze")
-async def analyze(payload: MappingPayload, background_tasks: BackgroundTasks):
+async def analyze(
+    payload: MappingPayload,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     global _latest_customers, _latest_segments
 
-    dataset = await DataStorageService.get_file_data(payload.dataset_id)
+    dataset = await DataStorageService.get_file_data(payload.dataset_id, db=db, user_id=current_user.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
 

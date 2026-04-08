@@ -1,12 +1,16 @@
-"""Service for managing uploaded CSV files and data storage via Supabase."""
+"""Service for managing uploaded CSV files and metadata storage in the database."""
 
 import io
-import json
+import uuid
+from typing import Any
+
 import pandas as pd
-from datetime import datetime
-from typing import Dict, List, Any, Optional
-from app.services.supabase_client import supabase_client
+from sqlalchemy import or_
+from sqlalchemy.orm import Session
+
 from app.core.config import settings
+from app.models.data_file import DataFile
+from app.services.supabase_client import supabase_client
 
 BUCKET = settings.supabase_bucket
 
@@ -14,97 +18,124 @@ class DataStorageService:
     """Manages uploaded CSV files and provides data access using Supabase Storage."""
 
     @staticmethod
-    async def get_index() -> Dict[str, Any]:
-        """Fetch the data index from Supabase Storage."""
-        try:
-            content = await supabase_client.download_file(BUCKET, "data_index.json")
-            return json.loads(content)
-        except Exception:
-            # If not found or empty, return default empty index
-            return {}
+    def _serialize_data_file(file_record: DataFile) -> dict[str, Any]:
+        metadata = file_record.metadata_json or {}
+        return {
+            "id": file_record.id,
+            "dataset_id": file_record.id,
+            "name": file_record.display_name,
+            "display_name": file_record.display_name,
+            "storage_name": file_record.storage_name,
+            "size": file_record.size_bytes,
+            "size_bytes": file_record.size_bytes,
+            "columns": metadata.get("column_count", 0),
+            "rows": metadata.get("row_count", 0),
+            "column_names": metadata.get("column_names", []),
+            "uploadDate": file_record.uploaded_at.isoformat() if file_record.uploaded_at else None,
+            "uploaded_at": file_record.uploaded_at.isoformat() if file_record.uploaded_at else None,
+            "status": "active",
+        }
 
     @staticmethod
-    async def save_index(index: Dict[str, Any]):
-        """Save the data index to Supabase Storage."""
-        content = json.dumps(index, indent=2).encode()
-        await supabase_client.upload_file(BUCKET, "data_index.json", content, "application/json")
+    def _file_query(db: Session, file_identifier: str, user_id: int) -> DataFile | None:
+        return (
+            db.query(DataFile)
+            .filter(
+                DataFile.user_id == user_id,
+                or_(DataFile.id == file_identifier, DataFile.storage_name == file_identifier),
+            )
+            .first()
+        )
 
     @staticmethod
-    async def save_uploaded_file(filename: str, file_content: bytes) -> Dict[str, Any]:
-        """Save uploaded file to Supabase and update index."""
-        safe_filename = filename.replace(" ", "_")
-        
-        # Upload to Supabase
-        await supabase_client.upload_file(BUCKET, safe_filename, file_content)
-        
-        # Read metadata using pandas
+    async def save_uploaded_file(
+        filename: str,
+        file_content: bytes,
+        db: Session,
+        user_id: int,
+    ) -> dict[str, Any]:
+        """Save uploaded file to Supabase and persist file metadata in the database."""
+        extension = filename.split(".")[-1].lower() if "." in filename else "csv"
+        storage_name = f"{uuid.uuid4()}.{extension}"
+
+        await supabase_client.upload_file(BUCKET, storage_name, file_content)
+
         try:
             df = pd.read_csv(io.BytesIO(file_content))
-            file_info = {
-                "id": safe_filename,
-                "name": filename,
-                "size": len(file_content),
-                "columns": len(df.columns),
-                "rows": len(df),
+            metadata = {
+                "column_count": len(df.columns),
+                "row_count": len(df),
                 "column_names": list(df.columns),
-                "uploadDate": datetime.now().isoformat(),
-                "status": "active"
             }
-            
-            # Update index
-            index = await DataStorageService.get_index()
-            index[safe_filename] = file_info
-            await DataStorageService.save_index(index)
-            
-            return file_info
+            record = DataFile(
+                user_id=user_id,
+                storage_name=storage_name,
+                display_name=filename,
+                size_bytes=len(file_content),
+                metadata_json=metadata,
+            )
+            db.add(record)
+            db.commit()
+            db.refresh(record)
+            return DataStorageService._serialize_data_file(record)
         except Exception as e:
-            # Cleanup on error
-            await supabase_client.delete_file(BUCKET, safe_filename)
-            raise ValueError(f"Failed to parse CSV file: {str(e)}")
+            db.rollback()
+            await supabase_client.delete_file(BUCKET, storage_name)
+            raise ValueError(f"Failed to parse CSV file: {str(e)}") from e
 
     @staticmethod
-    async def get_file_list() -> List[Dict[str, Any]]:
-        """Get list of all uploaded files."""
-        index = await DataStorageService.get_index()
-        return list(index.values())
+    async def get_file_list(db: Session, user_id: int) -> list[dict[str, Any]]:
+        """Get list of uploaded files for a user."""
+        files = (
+            db.query(DataFile)
+            .filter(DataFile.user_id == user_id)
+            .order_by(DataFile.uploaded_at.desc())
+            .all()
+        )
+        return [DataStorageService._serialize_data_file(file_record) for file_record in files]
 
     @staticmethod
-    async def get_file_data(filename: str) -> Optional[pd.DataFrame]:
-        """Get data from a specific file in Supabase."""
+    async def get_file_data(file_identifier: str, db: Session, user_id: int) -> pd.DataFrame | None:
+        """Get data from a specific file in Supabase by db id or storage name."""
+        file_record = DataStorageService._file_query(db, file_identifier, user_id)
+        if not file_record:
+            return None
+
         try:
-            content = await supabase_client.download_file(BUCKET, filename)
+            content = await supabase_client.download_file(BUCKET, file_record.storage_name)
             return pd.read_csv(io.BytesIO(content))
         except Exception as e:
-            print(f"Error reading file {filename} from Supabase: {e}")
+            print(f"Error reading file {file_identifier} from Supabase: {e}")
             return None
 
     @staticmethod
-    async def delete_file(filename: str) -> bool:
-        """Delete a file from Supabase and remove from index."""
+    async def delete_file(file_identifier: str, db: Session, user_id: int) -> bool:
+        """Delete a file from Supabase and remove its database record."""
+        file_record = DataStorageService._file_query(db, file_identifier, user_id)
+        if not file_record:
+            return False
+
         try:
-            await supabase_client.delete_file(BUCKET, filename)
-            
-            index = await DataStorageService.get_index()
-            if filename in index:
-                del index[filename]
-                await DataStorageService.save_index(index)
+            await supabase_client.delete_file(BUCKET, file_record.storage_name)
+            db.delete(file_record)
+            db.commit()
             return True
         except Exception:
+            db.rollback()
             return False
 
     @staticmethod
-    async def get_combined_data() -> pd.DataFrame:
-        """Get combined data from all active files in Supabase."""
-        index = await DataStorageService.get_index()
+    async def get_combined_data(db: Session, user_id: int) -> pd.DataFrame:
+        """Get combined data from all uploaded files for a user."""
+        files = await DataStorageService.get_file_list(db=db, user_id=user_id)
         dfs = []
-        
-        for filename, info in index.items():
-            if info.get("status") == "active":
-                df = await DataStorageService.get_file_data(filename)
-                if df is not None:
-                    dfs.append(df)
-        
+
+        for file_info in files:
+            df = await DataStorageService.get_file_data(file_info["id"], db=db, user_id=user_id)
+            if df is not None:
+                dfs.append(df)
+
         if not dfs:
             return pd.DataFrame()
-        
+
         return pd.concat(dfs, ignore_index=True) if len(dfs) > 1 else dfs[0]
