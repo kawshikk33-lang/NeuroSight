@@ -1,3 +1,4 @@
+import json
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from pydantic import field_validator, model_validator
@@ -29,18 +30,28 @@ class Settings(BaseSettings):
     aws_secret_access_key: str = ""
 
     # CORS
-    cors_origins: list[str] = [
+    cors_origins: list[str] | str = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ]
 
     @field_validator("cors_origins", mode="before")
     @classmethod
-    def assemble_cors_origins(cls, v: str | list[str]) -> list[str] | str:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
-        elif isinstance(v, (list, str)):
+    def assemble_cors_origins(cls, v: str | list[str]) -> list[str]:
+        if isinstance(v, list):
             return v
+        if isinstance(v, str):
+            raw = v.strip()
+            if not raw:
+                return []
+            if raw.startswith("["):
+                try:
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, list):
+                        return [str(item).strip() for item in parsed if str(item).strip()]
+                except json.JSONDecodeError:
+                    pass
+            return [i.strip() for i in raw.split(",") if i.strip()]
         raise ValueError(v)
 
     @model_validator(mode="after")
