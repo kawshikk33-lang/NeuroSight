@@ -1,4 +1,6 @@
-from pydantic import field_validator
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +14,7 @@ class Settings(BaseSettings):
     
     # Database
     database_url: str = "sqlite:///./neuro_sight.db"
+    supabase_db_url: str = ""
     
     # Supabase
     supabase_url: str = ""
@@ -39,6 +42,25 @@ class Settings(BaseSettings):
         elif isinstance(v, (list, str)):
             return v
         raise ValueError(v)
+
+    @model_validator(mode="after")
+    def apply_database_fallback(self):
+        # Prefer explicit DATABASE_URL; otherwise use SUPABASE_DB_URL when provided.
+        if self.database_url == "sqlite:///./neuro_sight.db" and self.supabase_db_url:
+            self.database_url = self.supabase_db_url
+
+        # psycopg2 rejects some Supabase query params (e.g., pgbouncer=true).
+        if self.database_url.startswith("postgresql"):
+            self.database_url = self._sanitize_postgres_url(self.database_url)
+        return self
+
+    @staticmethod
+    def _sanitize_postgres_url(url: str) -> str:
+        parts = urlsplit(url)
+        allowed = {"sslmode", "application_name", "connect_timeout", "options", "keepalives", "keepalives_idle", "keepalives_interval", "keepalives_count", "target_session_attrs", "gssencmode", "channel_binding", "sslrootcert", "sslcert", "sslkey", "sslcrl"}
+        query_items = parse_qsl(parts.query, keep_blank_values=True)
+        filtered_query = urlencode([(k, v) for k, v in query_items if k in allowed], doseq=True)
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, filtered_query, parts.fragment))
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

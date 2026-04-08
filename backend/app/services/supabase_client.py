@@ -8,9 +8,17 @@ class SupabaseClient:
     def __init__(self):
         self.url = settings.supabase_url
         self.key = settings.supabase_key
-        self.headers = {
+        # Service headers are used for privileged backend operations.
+        self.service_headers = {
             "apikey": self.key,
             "Authorization": f"Bearer {self.key}"
+        }
+
+        # Auth endpoints (/auth/v1/signup, /auth/v1/token) expect API key headers.
+        # Sending a service-role bearer token can lead to 401/permission issues.
+        self.auth_headers = {
+            "apikey": self.key,
+            "Content-Type": "application/json",
         }
 
     # Auth Methods
@@ -19,7 +27,7 @@ class SupabaseClient:
             response = await client.post(
                 f"{self.url}/auth/v1/signup",
                 json={"email": email, "password": password},
-                headers=self.headers
+                headers=self.auth_headers
             )
             response.raise_for_status()
             return response.json()
@@ -29,7 +37,7 @@ class SupabaseClient:
             response = await client.post(
                 f"{self.url}/auth/v1/token?grant_type=password",
                 json={"email": email, "password": password},
-                headers=self.headers
+                headers=self.auth_headers
             )
             response.raise_for_status()
             return response.json()
@@ -37,7 +45,7 @@ class SupabaseClient:
     # Storage Methods
     async def upload_file(self, bucket: str, path: str, content: bytes, content_type: str = "text/csv") -> Dict[str, Any]:
         async with httpx.AsyncClient() as client:
-            storage_headers = {**self.headers, "Content-Type": content_type}
+            storage_headers = {**self.service_headers, "Content-Type": content_type}
             response = await client.post(
                 f"{self.url}/storage/v1/object/{bucket}/{path}",
                 content=content,
@@ -50,7 +58,7 @@ class SupabaseClient:
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{self.url}/storage/v1/object/{bucket}/{path}",
-                headers=self.headers
+                headers=self.service_headers
             )
             response.raise_for_status()
             return response.content
@@ -59,7 +67,7 @@ class SupabaseClient:
         async with httpx.AsyncClient() as client:
             response = await client.delete(
                 f"{self.url}/storage/v1/object/{bucket}/{path}",
-                headers=self.headers
+                headers=self.service_headers
             )
             response.raise_for_status()
             return response.json()
