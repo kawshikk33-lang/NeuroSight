@@ -1,1 +1,19 @@
 node_modules
+# MLflow
+mlruns/
+backend/mlruns/
+
+# Models
+*.pkl
+*.joblib
+
+# Data
+*.csv
+
+# Python
+__pycache__/
+*.pyc
+
+# Env
+.venv/
+.env
