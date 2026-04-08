@@ -32,6 +32,26 @@ class SupabaseClient:
             response.raise_for_status()
             return response.json()
 
+    async def create_user_admin(
+        self,
+        email: str,
+        password: str,
+        *,
+        email_confirm: bool = True,
+    ) -> Dict[str, Any]:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{self.url}/auth/v1/admin/users",
+                json={
+                    "email": email,
+                    "password": password,
+                    "email_confirm": email_confirm,
+                },
+                headers={**self.auth_headers, **self.service_headers},
+            )
+            response.raise_for_status()
+            return response.json()
+
     async def sign_in(self, email: str, password: str) -> Dict[str, Any]:
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -48,6 +68,18 @@ class SupabaseClient:
                 f"{self.url}/auth/v1/token?grant_type=refresh_token",
                 json={"refresh_token": refresh_token},
                 headers=self.auth_headers,
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def get_user(self, access_token: str) -> Dict[str, Any]:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self.url}/auth/v1/user",
+                headers={
+                    "apikey": self.key,
+                    "Authorization": f"Bearer {access_token}",
+                },
             )
             response.raise_for_status()
             return response.json()

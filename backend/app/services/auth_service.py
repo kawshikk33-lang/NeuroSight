@@ -63,8 +63,8 @@ async def register_user(db: Session, full_name: str, email: str, password: str) 
         if existing_user:
             raise HTTPException(status_code=400, detail="Registration failed: Email already registered")
 
-        # Sign up in Supabase
-        await supabase_client.sign_up(email, password)
+        # Create user in Supabase as confirmed to allow immediate login.
+        await supabase_client.create_user_admin(email, password, email_confirm=True)
         
         # Create local user record
         user = User(

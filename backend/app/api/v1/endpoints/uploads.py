@@ -19,14 +19,17 @@ async def upload_file(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Upload a CSV file and return file information."""
+    """Upload a CSV/Excel file and return file information."""
     try:
         # Validate file type
-        if not file.filename.endswith('.csv'):
-            raise HTTPException(status_code=400, detail="Only CSV files are allowed")
+        extension = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else ""
+        if extension not in {"csv", "xlsx", "xls", "xlsm"}:
+            raise HTTPException(status_code=400, detail="Only CSV or Excel files (.csv, .xlsx, .xls, .xlsm) are allowed")
         
         # Read file content
         content = await file.read()
+        if not content:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty")
         
         # Save file and get metadata
         file_info = await DataStorageService.save_uploaded_file(
@@ -42,6 +45,8 @@ async def upload_file(
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
@@ -56,6 +61,8 @@ async def list_files(
         files = await DataStorageService.get_file_list(db=db, user_id=current_user.id)
         return files
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -80,6 +87,8 @@ async def preview_file(
             "preview": df.head(limit).to_dict('records')
         }
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -106,6 +115,8 @@ async def get_combined_data(
             "data": df.to_dict('records')[:100]  # Return first 100 rows
         }
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -122,4 +133,6 @@ async def delete_file(
         else:
             raise HTTPException(status_code=404, detail="File not found")
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
         raise HTTPException(status_code=500, detail=str(e))

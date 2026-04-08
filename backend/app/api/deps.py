@@ -1,29 +1,31 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
+from httpx import HTTPStatusError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.session import get_db
 from app.models.user import User
+from app.services.supabase_client import supabase_client
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_prefix}/auth/login")
 
 
-def get_current_user(
+async def get_current_user(
     db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)
 ) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials"
     )
     try:
-        # Supabase uses HS256 for its JWTs signed with the project JWT secret
-        key = settings.supabase_jwt_secret or settings.secret_key
-        payload = jwt.decode(token, key, algorithms=["HS256"])
-        email = payload.get("email") or payload.get("sub")
+        # Validate token with Supabase directly to support current JWT signing modes.
+        profile = await supabase_client.get_user(token)
+        email = profile.get("email")
         if not email:
             raise credentials_exception
-    except JWTError:
+    except HTTPStatusError:
+        raise credentials_exception
+    except Exception:
         raise credentials_exception
         
     user = db.query(User).filter(User.email == email).first()

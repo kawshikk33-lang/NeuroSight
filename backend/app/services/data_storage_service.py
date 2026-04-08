@@ -1,4 +1,4 @@
-"""Service for managing uploaded CSV files and metadata storage in the database."""
+"""Service for managing uploaded tabular files and metadata storage in the database."""
 
 import io
 import uuid
@@ -15,7 +15,36 @@ from app.services.supabase_client import supabase_client
 BUCKET = settings.supabase_bucket
 
 class DataStorageService:
-    """Manages uploaded CSV files and provides data access using Supabase Storage."""
+    """Manages uploaded CSV/Excel files and provides data access using Supabase Storage."""
+
+    SUPPORTED_EXTENSIONS = {"csv", "xlsx", "xls", "xlsm"}
+    EXCEL_CONTENT_TYPES = {
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "xls": "application/vnd.ms-excel",
+    }
+
+    @staticmethod
+    def _extension_from_name(filename: str) -> str:
+        return filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+
+    @staticmethod
+    def _read_dataframe(file_content: bytes, extension: str) -> pd.DataFrame:
+        buffer = io.BytesIO(file_content)
+        if extension == "csv":
+            try:
+                return pd.read_csv(buffer)
+            except Exception:
+                buffer.seek(0)
+                return pd.read_csv(buffer, encoding="latin1")
+        if extension in {"xlsx", "xlsm"}:
+            return pd.read_excel(buffer, engine="openpyxl")
+        if extension == "xls":
+            try:
+                return pd.read_excel(buffer, engine="xlrd")
+            except Exception:
+                buffer.seek(0)
+                return pd.read_excel(buffer, engine="openpyxl")
+        raise ValueError(f"Unsupported file extension: {extension}")
 
     @staticmethod
     def _serialize_data_file(file_record: DataFile) -> dict[str, Any]:
@@ -55,18 +84,31 @@ class DataStorageService:
         user_id: int,
     ) -> dict[str, Any]:
         """Save uploaded file to Supabase and persist file metadata in the database."""
-        extension = filename.split(".")[-1].lower() if "." in filename else "csv"
-        storage_name = f"{uuid.uuid4()}.{extension}"
-
-        await supabase_client.upload_file(BUCKET, storage_name, file_content)
+        extension = DataStorageService._extension_from_name(filename)
+        if extension not in DataStorageService.SUPPORTED_EXTENSIONS:
+            supported = ", ".join(sorted(DataStorageService.SUPPORTED_EXTENSIONS))
+            raise ValueError(f"Unsupported file type. Allowed extensions: {supported}")
 
         try:
-            df = pd.read_csv(io.BytesIO(file_content))
-            metadata = {
-                "column_count": len(df.columns),
-                "row_count": len(df),
-                "column_names": list(df.columns),
-            }
+            df = DataStorageService._read_dataframe(file_content, extension)
+        except Exception as e:
+            raise ValueError(f"Failed to parse uploaded file: {str(e)}") from e
+
+        metadata = {
+            "column_count": len(df.columns),
+            "row_count": len(df),
+            "column_names": list(df.columns),
+        }
+
+        storage_name = f"{uuid.uuid4()}.{extension}"
+        content_type = DataStorageService.EXCEL_CONTENT_TYPES.get(extension, "text/csv")
+
+        try:
+            await supabase_client.upload_file(BUCKET, storage_name, file_content, content_type=content_type)
+        except Exception as e:
+            raise ValueError(f"Failed to upload file to storage: {str(e)}") from e
+
+        try:
             record = DataFile(
                 user_id=user_id,
                 storage_name=storage_name,
@@ -80,8 +122,12 @@ class DataStorageService:
             return DataStorageService._serialize_data_file(record)
         except Exception as e:
             db.rollback()
-            await supabase_client.delete_file(BUCKET, storage_name)
-            raise ValueError(f"Failed to parse CSV file: {str(e)}") from e
+            try:
+                await supabase_client.delete_file(BUCKET, storage_name)
+            except Exception:
+                # Keep parse/validation error as primary failure signal.
+                pass
+            raise ValueError(f"Failed to save file metadata: {str(e)}") from e
 
     @staticmethod
     async def get_file_list(db: Session, user_id: int) -> list[dict[str, Any]]:
@@ -103,7 +149,8 @@ class DataStorageService:
 
         try:
             content = await supabase_client.download_file(BUCKET, file_record.storage_name)
-            return pd.read_csv(io.BytesIO(content))
+            extension = DataStorageService._extension_from_name(file_record.storage_name)
+            return DataStorageService._read_dataframe(content, extension)
         except Exception as e:
             print(f"Error reading file {file_identifier} from Supabase: {e}")
             return None
