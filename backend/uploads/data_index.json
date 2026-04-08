@@ -1,0 +1,21 @@
+{
+  "Sales_Transaction_v.4a.csv": {
+    "id": "Sales_Transaction_v.4a.csv",
+    "name": "Sales Transaction v.4a.csv",
+    "size": 42995360,
+    "columns": 8,
+    "rows": 536350,
+    "column_names": [
+      "TransactionNo",
+      "Date",
+      "ProductNo",
+      "ProductName",
+      "Price",
+      "Quantity",
+      "CustomerNo",
+      "Country"
+    ],
+    "uploadDate": "2026-04-08T12:49:14.155989",
+    "status": "active"
+  }
+}
