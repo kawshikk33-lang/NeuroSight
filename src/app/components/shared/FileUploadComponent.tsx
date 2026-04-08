@@ -12,7 +12,11 @@ interface UploadedFile {
   status: "active" | "archived";
 }
 
-export function FileUploadComponent() {
+interface FileUploadComponentProps {
+  onFilesChanged?: (files: UploadedFile[]) => void;
+}
+
+export function FileUploadComponent({ onFilesChanged }: FileUploadComponentProps) {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -30,10 +34,12 @@ export function FileUploadComponent() {
     try {
       setLoading(true);
       const uploadedFiles = await apiClient.getUploadedFiles();
-      setFiles(uploadedFiles.map(file => ({
+      const normalizedFiles = uploadedFiles.map(file => ({
         ...file,
         status: (file.status === "active" || file.status === "archived" ? file.status : "active") as "active" | "archived"
-      })));
+      }));
+      setFiles(normalizedFiles);
+      onFilesChanged?.(normalizedFiles);
     } catch (error) {
       setMessage({
         type: "error",

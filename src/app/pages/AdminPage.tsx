@@ -47,21 +47,42 @@ export function AdminPage() {
   const [lastTrainingDate, setLastTrainingDate] = useState("Not trained yet");
   const [lastTrainingDuration, setLastTrainingDuration] = useState("0 hours");
 
+  const syncDatasetsFromUploadedFiles = (uploadedFiles: Array<{
+    id: string;
+    name: string;
+    size: number;
+    columns: number;
+    uploadDate: string;
+    status: string;
+  }>) => {
+    if (!uploadedFiles?.length) {
+      setDatasets([]);
+      setSelectedDataset("");
+      setUploadedColumns([]);
+      return;
+    }
+
+    setDatasets(
+      uploadedFiles.map((f) => ({
+        id: f.id,
+        name: f.name,
+        size: `${(f.size / 1024).toFixed(1)} KB`,
+        columns: f.columns,
+        uploadDate: new Date(f.uploadDate).toLocaleDateString(),
+        status: f.status,
+      }))
+    );
+    setSelectedDataset((current) =>
+      uploadedFiles.some((file) => file.id === current) ? current : uploadedFiles[0].id
+    );
+  };
+
   useEffect(() => {
     // Load uploaded files to populate datasets
     apiClient.getUploadedFiles()
       .then((uploadedFiles) => {
         if (uploadedFiles?.length > 0) {
-          setDatasets(
-            uploadedFiles.map((f) => ({
-              id: f.id,
-              name: f.name,
-              size: `${(f.size / 1024).toFixed(1)} KB`,
-              columns: f.columns,
-              uploadDate: new Date(f.uploadDate).toLocaleDateString(),
-              status: f.status,
-            }))
-          );
+          syncDatasetsFromUploadedFiles(uploadedFiles);
           // Set first dataset as default
           setSelectedDataset(uploadedFiles[0].id);
           // Get columns from first file
@@ -229,7 +250,7 @@ export function AdminPage() {
 
       {/* File Upload Component */}
       <div className="mb-8">
-        <FileUploadComponent />
+        <FileUploadComponent onFilesChanged={syncDatasetsFromUploadedFiles} />
       </div>
 
       {/* Dataset Manager */}
