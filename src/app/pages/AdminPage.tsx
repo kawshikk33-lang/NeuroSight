@@ -47,6 +47,29 @@ export function AdminPage() {
   const [lastTrainingDate, setLastTrainingDate] = useState("Not trained yet");
   const [lastTrainingDuration, setLastTrainingDuration] = useState("0 hours");
 
+  const loadDatasetColumns = async (datasetId: string) => {
+    if (!datasetId) {
+      setUploadedColumns([]);
+      return;
+    }
+    try {
+      const preview = await apiClient.getFilePreview(datasetId, 1);
+      setUploadedColumns(preview.columns);
+      if (preview.columns.length > 0) {
+        const first = preview.columns[0];
+        setSelectedTarget(first);
+        setSelectedDateColumn(first);
+        setSelectedCustomerIdColumn(first);
+        setSelectedPriceColumn(first);
+        setSelectedQuantityColumn(first);
+        setSelectedFeatureColumns([]);
+      }
+    } catch (error) {
+      setUploadedColumns([]);
+      console.error("Failed to fetch columns:", error);
+    }
+  };
+
   const syncDatasetsFromUploadedFiles = (uploadedFiles: Array<{
     id: string;
     name: string;
@@ -72,9 +95,11 @@ export function AdminPage() {
         status: f.status,
       }))
     );
-    setSelectedDataset((current) =>
-      uploadedFiles.some((file) => file.id === current) ? current : uploadedFiles[0].id
-    );
+    const nextSelected = uploadedFiles.some((file) => file.id === selectedDataset)
+      ? selectedDataset
+      : uploadedFiles[0].id;
+    setSelectedDataset(nextSelected);
+    void loadDatasetColumns(nextSelected);
   };
 
   useEffect(() => {
@@ -83,22 +108,6 @@ export function AdminPage() {
       .then((uploadedFiles) => {
         if (uploadedFiles?.length > 0) {
           syncDatasetsFromUploadedFiles(uploadedFiles);
-          // Set first dataset as default
-          setSelectedDataset(uploadedFiles[0].id);
-          // Get columns from first file
-          apiClient.getFilePreview(uploadedFiles[0].id, 1)
-            .then((preview) => {
-              setUploadedColumns(preview.columns);
-              const first = preview.columns[0] ?? "";
-              if (preview.columns.length > 0) {
-                setSelectedTarget(first);
-                setSelectedDateColumn(first);
-                setSelectedCustomerIdColumn(first);
-                setSelectedPriceColumn(first);
-                setSelectedQuantityColumn(first);
-              }
-            })
-            .catch(() => {});
         }
       })
       .catch(() => {
@@ -215,21 +224,7 @@ export function AdminPage() {
 
   const handleFetchDatasetColumns = async (datasetId: string) => {
     setSelectedDataset(datasetId);
-    try {
-      const preview = await apiClient.getFilePreview(datasetId, 1);
-      setUploadedColumns(preview.columns);
-      if (preview.columns.length > 0) {
-        const first = preview.columns[0];
-        setSelectedTarget(first);
-        setSelectedDateColumn(first);
-        setSelectedCustomerIdColumn(first);
-        setSelectedPriceColumn(first);
-        setSelectedQuantityColumn(first);
-        setSelectedFeatureColumns([]);
-      }
-    } catch (error) {
-      console.error("Failed to fetch columns:", error);
-    }
+    await loadDatasetColumns(datasetId);
   };
 
   const toggleFeatureColumn = (column: string) => {
