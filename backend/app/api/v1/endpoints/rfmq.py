@@ -351,7 +351,7 @@ async def upload(file: UploadFile = File(...)):
 
     try:
         content = await file.read()
-        file_info = DataStorageService.save_uploaded_file(file.filename, content)
+        file_info = await DataStorageService.save_uploaded_file(file.filename, content)
         return {
             "status": "uploaded",
             "file": file_info,
@@ -364,8 +364,8 @@ async def upload(file: UploadFile = File(...)):
 
 
 @router.post("/mappings/validate")
-def validate_mappings(payload: MappingPayload):
-    dataset = DataStorageService.get_file_data(payload.dataset_id)
+async def validate_mappings(payload: MappingPayload):
+    dataset = await DataStorageService.get_file_data(payload.dataset_id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
 
@@ -386,10 +386,10 @@ def validate_mappings(payload: MappingPayload):
 
 
 @router.post("/analyze")
-def analyze(payload: AnalyzePayload, background_tasks: BackgroundTasks):
+async def analyze(payload: AnalyzePayload, background_tasks: BackgroundTasks):
     global _latest_customers, _latest_segments
 
-    dataset = DataStorageService.get_file_data(payload.dataset_id)
+    dataset = await DataStorageService.get_file_data(payload.dataset_id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
 

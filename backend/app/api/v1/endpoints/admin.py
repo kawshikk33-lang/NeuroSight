@@ -20,15 +20,15 @@ class TrainingRequest(BaseModel):
 
 
 @router.get("/datasets")
-def list_datasets():
+async def list_datasets():
     """List all uploaded datasets."""
-    return DataStorageService.get_file_list()
+    return await DataStorageService.get_file_list()
 
 
 @router.post("/training/start")
-def start_training(payload: TrainingRequest, background_tasks: BackgroundTasks):
+async def start_training(payload: TrainingRequest, background_tasks: BackgroundTasks):
     """Start model training with specified parameters."""
-    dataset = DataStorageService.get_file_data(payload.dataset_id)
+    dataset = await DataStorageService.get_file_data(payload.dataset_id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
 

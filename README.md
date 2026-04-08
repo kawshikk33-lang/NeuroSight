@@ -62,7 +62,7 @@ graph TD
 
 ## 📦 Getting Started
 
-### �️ Installation
+### 🛠️ Installation
 
 #### Backend Setup
 1. Navigate to the backend directory: `cd backend`
@@ -75,6 +75,31 @@ graph TD
 1. Navigate to the root directory.
 2. Install dependencies: `npm install`
 3. Start development server: `npm run dev`
+
+---
+
+## ☁️ Cloud Deployment
+
+### Backend on Railway
+1. Create a new Railway project and add a service from this repo.
+2. Set service root directory to `backend`.
+3. Railway will use `backend/Procfile` to start the app on `$PORT`.
+4. Add environment variables from `backend/.env.example`.
+5. For production, set:
+    - `DATABASE_URL` to Railway PostgreSQL connection URL.
+    - `CORS_ORIGINS` to include your Vercel domain (JSON array format).
+6. Deploy and copy your Railway public URL (example: `https://your-api.up.railway.app`).
+
+### Frontend on Vercel
+1. Import this repository in Vercel.
+2. Keep project root as repository root.
+3. Build command: `npm run build`.
+4. Output directory: `dist`.
+5. Add environment variable:
+    - `VITE_API_BASE_URL=https://your-api.up.railway.app/api/v1`
+6. Deploy.
+
+`vercel.json` is included so client-side routes are rewritten to `index.html`.
 
 ---
 

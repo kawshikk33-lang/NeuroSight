@@ -17,13 +17,15 @@ def get_current_user(
         status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials"
     )
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-        email = payload.get("sub")
-        token_type = payload.get("type")
-        if not email or token_type != "access":
+        # Supabase uses HS256 for its JWTs signed with the project JWT secret
+        key = settings.supabase_jwt_secret or settings.secret_key
+        payload = jwt.decode(token, key, algorithms=["HS256"])
+        email = payload.get("email") or payload.get("sub")
+        if not email:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
+        
     user = db.query(User).filter(User.email == email).first()
     if not user or not user.is_active:
         raise credentials_exception

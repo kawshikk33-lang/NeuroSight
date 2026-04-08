@@ -21,7 +21,7 @@ async def upload_file(file: UploadFile = File(...)):
         content = await file.read()
         
         # Save file and get metadata
-        file_info = DataStorageService.save_uploaded_file(file.filename, content)
+        file_info = await DataStorageService.save_uploaded_file(file.filename, content)
         
         return {
             "success": True,
@@ -34,20 +34,20 @@ async def upload_file(file: UploadFile = File(...)):
 
 
 @router.get("/files")
-def list_files() -> List[dict]:
+async def list_files() -> List[dict]:
     """Get list of all uploaded files."""
     try:
-        files = DataStorageService.get_file_list()
+        files = await DataStorageService.get_file_list()
         return files
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/files/{filename}/preview")
-def preview_file(filename: str, limit: int = 10):
+async def preview_file(filename: str, limit: int = 10):
     """Get a preview of file data (first N rows)."""
     try:
-        df = DataStorageService.get_file_data(filename)
+        df = await DataStorageService.get_file_data(filename)
         if df is None:
             raise HTTPException(status_code=404, detail="File not found")
         
@@ -62,23 +62,11 @@ def preview_file(filename: str, limit: int = 10):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/files/{filename}")
-def delete_file(filename: str):
-    """Delete an uploaded file."""
-    try:
-        if DataStorageService.delete_file(filename):
-            return {"success": True, "message": f"File {filename} deleted"}
-        else:
-            raise HTTPException(status_code=404, detail="File not found")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @router.get("/data")
-def get_combined_data():
+async def get_combined_data():
     """Get combined data from all active files."""
     try:
-        df = DataStorageService.get_combined_data()
+        df = await DataStorageService.get_combined_data()
         
         if df.empty:
             return {
@@ -93,5 +81,17 @@ def get_combined_data():
             "columns": list(df.columns),
             "data": df.to_dict('records')[:100]  # Return first 100 rows
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/files/{filename}")
+async def delete_file(filename: str):
+    """Delete an uploaded file."""
+    try:
+        if await DataStorageService.delete_file(filename):
+            return {"success": True, "message": f"File {filename} deleted"}
+        else:
+            raise HTTPException(status_code=404, detail="File not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
