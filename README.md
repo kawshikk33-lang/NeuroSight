@@ -1,7 +1,5 @@
 <div align="center">
 
-![NeuroSight Banner](assets/banner.png)
-
 # 🌐 NeuroSight
 ### Advanced Predictive Analytics & Neural Machine Learning Dashboard
 
@@ -45,7 +43,6 @@
 - **Migration**: Alembic
 - **ML Frameworks**: Scikit-Learn, XGBoost, LightGBM
 - **Experiment Tracking**: MLflow
-- **Containerization**: Docker & Docker Compose
 
 ---
 
@@ -65,15 +62,7 @@ graph TD
 
 ## 📦 Getting Started
 
-### 🐳 Using Docker (Recommended)
-The fastest way to get NeuroSight running is using Docker Compose.
-
-```bash
-docker-compose up --build
-```
-*Frontend will be available at `http://localhost:5173` and API at `http://localhost:8000`.*
-
-### 🛠️ Manual Installation
+### �️ Installation
 
 #### Backend Setup
 1. Navigate to the backend directory: `cd backend`
