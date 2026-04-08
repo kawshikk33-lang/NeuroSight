@@ -1,6 +1,6 @@
 # fly.toml app configuration file generated for NeuroSight Backend
 
-app = "neurosight-backend"
+app = "backend-autumn-waterfall-7641"
 primary_region = "sin"
 
 [build]
