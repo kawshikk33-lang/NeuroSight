@@ -7,14 +7,14 @@ print("Connecting to Supabase...")
 engine = create_engine(db_url)
 
 with engine.connect() as conn:
-    print("Renaming alembic_version table...")
-    # Since Alembic has already run for the app and created `alembic_version`,
-    # we rename it to `app_alembic_version`.
-    # We use IF EXISTS to avoid errors if ran multiple times.
-    conn.execute(text("ALTER TABLE IF EXISTS public.alembic_version RENAME TO app_alembic_version;"))
-    
-    # If MLflow previously tried to use `mlflow` schema, let's keep it clean
-    conn.execute(text("DROP SCHEMA IF EXISTS mlflow CASCADE;"))
-    
-    conn.commit()
-    print("Successfully migrated Alembic tracking tables!")
+    print("Renaming primary key constraint...")
+    try:
+        # In PostgreSQL, constraint names must be unique per schema.
+        # When we renamed the table, the constraint kept the old name `alembic_version_pkc`.
+        # This blocks MLflow from creating its own `alembic_version` table with the same constraint name.
+        conn.execute(text("ALTER TABLE public.app_alembic_version RENAME CONSTRAINT alembic_version_pkc TO app_alembic_version_pkc;"))
+        conn.commit()
+        print("Constraint renamed successfully!")
+    except Exception as e:
+        print(f"Error (might already be renamed or missing): {e}")
+
