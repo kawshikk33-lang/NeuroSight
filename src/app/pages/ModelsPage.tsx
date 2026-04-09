@@ -18,14 +18,24 @@ import { mockModelMetrics, mockFeatureImportance, mockTimeSeriesForecast } from 
 import { processModelMetrics, processFeatureImportance, processTimeSeriesForecast } from "../utils/dataProcessing";
 import { apiClient } from "../services/api/client";
 
+interface TrainingInfo {
+  dataset_size: number;
+  num_features: number;
+  last_training_date: string;
+  last_training_duration: number;
+  model_name: string;
+  status: string;
+}
+
 export function ModelsPage() {
-  const [activeModel, setActiveModel] = useState<{ id: string; task?: string } | null>(
-    null
-  );
+  const [activeModel, setActiveModel] = useState<{ id: string; task?: string } | null>(null);
   const [versions, setVersions] = useState<Array<{ id: string; status: string }>>([]);
   const [metrics, setMetrics] = useState<Record<string, number>>(mockModelMetrics[0] ?? {});
   const [featureImportance, setFeatureImportance] = useState(mockFeatureImportance);
   const [accuracySeries, setAccuracySeries] = useState(mockTimeSeriesForecast.filter((d) => d.actual > 0));
+  
+  const [hyperparameters, setHyperparameters] = useState<Record<string, any>>({});
+  const [trainingInfo, setTrainingInfo] = useState<TrainingInfo | null>(null);
 
   useEffect(() => {
     // Try to fetch uploaded data first
@@ -53,25 +63,29 @@ export function ModelsPage() {
             setAccuracySeries(processedSeries.filter((d) => d.actual > 0));
           }
 
-          return;
+          // Fall back gracefully for params
+          throw new Error("No uploaded data overrides needed for dynamic MLflow run data.");
         }
-
-        // Fallback to API endpoints if no uploaded data
         throw new Error("No uploaded data");
       })
       .catch(() => {
-        // Fallback to original API endpoints
+        // Fallback to original API endpoints (dynamic from MLflow!)
         Promise.all([
           apiClient.get<{ id: string; task?: string }>("/models/active"),
           apiClient.get<Array<{ id: string; status: string }>>("/models/versions"),
           apiClient.get<Record<string, number>>("/models/metrics"),
           apiClient.get<Array<{ feature: string; importance: number }>>("/models/feature-importance"),
           apiClient.get<Array<{ month?: string; value: number }>>("/dashboard/forecast-trend"),
+          apiClient.get<Record<string, any>>("/models/hyperparameters"),
+          apiClient.get<TrainingInfo>("/models/training-info"),
         ])
-          .then(([activeRes, versionsRes, metricsRes, featureRes, trendRes]) => {
+          .then(([activeRes, versionsRes, metricsRes, featureRes, trendRes, paramsRes, infoRes]) => {
             setActiveModel(activeRes);
             setVersions(versionsRes);
             setMetrics(metricsRes);
+            setHyperparameters(paramsRes || {});
+            setTrainingInfo(infoRes);
+            
             if (featureRes?.length) {
               setFeatureImportance(featureRes);
             }
@@ -92,6 +106,29 @@ export function ModelsPage() {
   }, []);
 
   const activeModelName = useMemo(() => activeModel?.id ?? "Sales Forecasting Engine v2.1", [activeModel]);
+  
+  // Prepare Hyperparameter list
+  const paramsList = Object.entries(hyperparameters).map(([key, value]) => ({
+    name: key,
+    value: String(value)
+  })).slice(0, 6); // Just show top 6 if there are many
+
+  const defaultParams = [
+    { name: "n_estimators", value: "300" },
+    { name: "max_depth", value: "12" },
+    { name: "learning_rate", value: "0.05" },
+    { name: "subsample", value: "0.8" },
+    { name: "colsample_bytree", value: "0.8" },
+  ];
+
+  const displayParams = paramsList.length > 0 ? paramsList : defaultParams;
+  
+  // Format dates
+  const trainDate = trainingInfo?.last_training_date 
+    ? new Date(trainingInfo.last_training_date) 
+    : new Date("2026-04-01");
+  const monthDay = trainDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const year = trainDate.getFullYear();
 
   return (
     <div className="p-8">
@@ -115,8 +152,6 @@ export function ModelsPage() {
                 Active
               </span>
               <span className="text-sm text-slate-400">{activeModel?.task ?? "Time Series Forecasting"}</span>
-              <span className="text-sm text-slate-400">•</span>
-              <span className="text-sm text-slate-400">XGBoost Regressor</span>
             </div>
           </div>
           <div className="w-16 h-16 bg-gradient-to-br from-emerald-400 to-cyan-500 rounded-xl flex items-center justify-center">
@@ -127,23 +162,25 @@ export function ModelsPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="p-4 bg-slate-800/50 rounded-lg">
             <p className="text-xs text-slate-400 mb-1">Dataset Size</p>
-            <p className="text-xl font-bold text-slate-100">18,542</p>
+            <p className="text-xl font-bold text-slate-100">{trainingInfo?.dataset_size || "18,542"}</p>
             <p className="text-xs text-slate-500 mt-1">training samples</p>
           </div>
           <div className="p-4 bg-slate-800/50 rounded-lg">
             <p className="text-xs text-slate-400 mb-1">Features Used</p>
-            <p className="text-xl font-bold text-slate-100">15</p>
+            <p className="text-xl font-bold text-slate-100">{trainingInfo?.num_features || "15"}</p>
             <p className="text-xs text-slate-500 mt-1">input features</p>
           </div>
           <div className="p-4 bg-slate-800/50 rounded-lg">
             <p className="text-xs text-slate-400 mb-1">Training Date</p>
-            <p className="text-xl font-bold text-slate-100">Apr 1</p>
-            <p className="text-xs text-slate-500 mt-1">2026</p>
+            <p className="text-xl font-bold text-slate-100">{monthDay}</p>
+            <p className="text-xs text-slate-500 mt-1">{year}</p>
           </div>
           <div className="p-4 bg-slate-800/50 rounded-lg">
             <p className="text-xs text-slate-400 mb-1">Training Time</p>
-            <p className="text-xl font-bold text-slate-100">5.8h</p>
-            <p className="text-xs text-slate-500 mt-1">with validation</p>
+            <p className="text-xl font-bold text-slate-100">
+              {trainingInfo?.last_training_duration ? `${trainingInfo.last_training_duration.toFixed(2)}s` : "5.8h"}
+            </p>
+            <p className="text-xs text-slate-500 mt-1">execution time</p>
           </div>
         </div>
       </div>
@@ -171,10 +208,10 @@ export function ModelsPage() {
           changeType="neutral"
         />
         <MetricCard
-          title="R²"
-          value={(metrics.r2 ?? 0.94).toFixed(3)}
+          title="R² / Silhouette"
+          value={(metrics.r2 ?? metrics.silhouette ?? 0.94).toFixed(3)}
           icon={Cpu}
-          subtitle="Variance explained"
+          subtitle="Variance / Cluster score"
         />
       </div>
 
@@ -286,22 +323,16 @@ export function ModelsPage() {
             <div className="w-10 h-10 bg-cyan-500/10 rounded-lg flex items-center justify-center">
               <Zap className="w-5 h-5 text-cyan-400" />
             </div>
-            <h2 className="text-xl font-bold text-slate-100">Hyperparameters</h2>
+            <h2 className="text-xl font-bold text-slate-100">Live Hyperparameters</h2>
           </div>
           <div className="space-y-3">
-            {[
-              { name: "n_estimators", value: "300" },
-              { name: "max_depth", value: "12" },
-              { name: "learning_rate", value: "0.05" },
-              { name: "subsample", value: "0.8" },
-              { name: "colsample_bytree", value: "0.8" },
-            ].map((param) => (
+            {displayParams.map((param) => (
               <div
                 key={param.name}
                 className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg"
               >
                 <span className="text-sm text-slate-300">{param.name}</span>
-                <span className="text-sm font-semibold text-emerald-400">
+                <span className="text-sm font-semibold text-emerald-400 truncate max-w-[150px] text-right" title={param.value}>
                   {param.value}
                 </span>
               </div>
@@ -322,20 +353,20 @@ export function ModelsPage() {
               ? versions.map((v, idx) => ({
                   version: v.id,
                   date: idx === 0 ? "Latest" : "Previous",
-                  mape: `${(metrics.mape ?? 8.2).toFixed(1)}%`,
+                  mape: `${(metrics.mape ?? metrics.silhouette ?? 8.2).toFixed(1)}%`,
                   status: v.status,
                 }))
               : [
                   {
-                    version: "v2.1",
-                    date: "Apr 1, 2026",
+                    version: activeModelName,
+                    date: monthDay,
                     mape: "8.2%",
                     status: "active",
                   },
                 ]
-            ).map((version) => (
+            ).map((version, id) => (
               <div
-                key={version.version}
+                key={id}
                 className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg"
               >
                 <div>
@@ -352,7 +383,7 @@ export function ModelsPage() {
                   <p className="text-xs text-slate-500">{version.date}</p>
                 </div>
                 <span className="text-sm font-semibold text-cyan-400">
-                  MAPE: {version.mape}
+                  Val: {version.mape}
                 </span>
               </div>
             ))}
@@ -362,3 +393,4 @@ export function ModelsPage() {
     </div>
   );
 }
+

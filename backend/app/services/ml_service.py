@@ -8,7 +8,9 @@ import mlflow
 import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_absolute_error, mean_squared_error, silhouette_score
+from sklearn.metrics import mean_absolute_error, mean_squared_error, silhouette_score, r2_score, mean_absolute_percentage_error
+import time
+from mlflow.tracking import MlflowClient
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
@@ -39,17 +41,30 @@ def train_forecast_model(df: pd.DataFrame) -> TrainResult:
     scaler = StandardScaler()
     X_train_s = scaler.fit_transform(X_train)
     X_test_s = scaler.transform(X_test)
+    start_time = time.time()
     model = RandomForestRegressor(n_estimators=200, random_state=42)
     model.fit(X_train_s, y_train)
     pred = model.predict(X_test_s)
+    train_time = time.time() - start_time
+
     rmse = float(mean_squared_error(y_test, pred) ** 0.5)
     mae = float(mean_absolute_error(y_test, pred))
+    mape = float(mean_absolute_percentage_error(y_test, pred)) * 100
+    r2 = float(r2_score(y_test, pred))
+
     model_id = "forecast-rf-v1"
     with mlflow.start_run(run_name=model_id):
         mlflow.log_metric("rmse", rmse)
         mlflow.log_metric("mae", mae)
+        mlflow.log_metric("mape", mape)
+        mlflow.log_metric("r2", r2)
+        mlflow.log_metric("training_time", train_time)
+        mlflow.log_param("dataset_size", len(X))
+        mlflow.log_param("num_features", X.shape[1])
+        mlflow.log_params(model.get_params())
+        mlflow.set_tag("task", "Time Series Forecasting")
         mlflow.sklearn.log_model(model, artifact_path="model")
-    return TrainResult(model_id=model_id, metrics={"rmse": rmse, "mae": mae})
+    return TrainResult(model_id=model_id, metrics={"rmse": rmse, "mae": mae, "mape": mape, "r2": r2})
 
 
 def train_rfmq_model(df: pd.DataFrame) -> TrainResult:
@@ -60,12 +75,20 @@ def train_rfmq_model(df: pd.DataFrame) -> TrainResult:
     X = cleaned[cols]
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
+    start_time = time.time()
     model = KMeans(n_clusters=4, random_state=42, n_init="auto")
     labels = model.fit_predict(X_scaled)
+    train_time = time.time() - start_time
+
     sil = float(silhouette_score(X_scaled, labels))
     model_id = "rfmq-kmeans-v1"
     with mlflow.start_run(run_name=model_id):
         mlflow.log_metric("silhouette", sil)
+        mlflow.log_metric("training_time", train_time)
+        mlflow.log_param("dataset_size", len(X))
+        mlflow.log_param("num_features", len(cols))
+        mlflow.log_params(model.get_params())
+        mlflow.set_tag("task", "Customer Segmentation")
         mlflow.sklearn.log_model(model, artifact_path="model")
     return TrainResult(model_id=model_id, metrics={"silhouette": sil})
 
@@ -145,3 +168,29 @@ def run_rfmq_pipeline(
     rfmq_df = grouped[["recency", "frequency", "monetary", "quantity"]]
 
     return train_rfmq_model(rfmq_df)
+
+
+def get_latest_mlflow_run(experiment_name: str = "0"):
+    client = MlflowClient()
+    try:
+        # Get the latest run
+        runs = client.search_runs(
+            experiment_ids=["0"], 
+            order_by=["start_time DESC"], 
+            max_results=1
+        )
+        if not runs:
+            return None
+        latest_run = runs[0]
+        return {
+            "run_id": latest_run.info.run_id,
+            "run_name": latest_run.info.run_name,
+            "status": latest_run.info.status,
+            "start_time": latest_run.info.start_time,
+            "metrics": latest_run.data.metrics,
+            "params": latest_run.data.params,
+            "tags": latest_run.data.tags,
+        }
+    except Exception as e:
+        print(f"Error fetching from MLflow: {e}")
+        return None
