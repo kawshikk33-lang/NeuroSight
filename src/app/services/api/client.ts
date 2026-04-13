@@ -304,4 +304,187 @@ export const apiClient = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+
+  // --- Audit & Compliance ---
+  getAuditLogs: (params?: {
+    event_type?: string
+    user_email?: string
+    resource_type?: string
+    start_date?: string
+    end_date?: string
+    is_sensitive?: boolean
+    page?: number
+    page_size?: number
+  }) => {
+    const qs = new URLSearchParams()
+    if (params?.event_type) qs.set('event_type', params.event_type)
+    if (params?.user_email) qs.set('user_email', params.user_email)
+    if (params?.resource_type) qs.set('resource_type', params.resource_type)
+    if (params?.start_date) qs.set('start_date', params.start_date)
+    if (params?.end_date) qs.set('end_date', params.end_date)
+    if (params?.is_sensitive !== undefined) qs.set('is_sensitive', String(params.is_sensitive))
+    if (params?.page) qs.set('page', String(params.page))
+    if (params?.page_size) qs.set('page_size', String(params.page_size))
+    return request<{
+      logs: Array<{
+        id: string
+        user_email: string | null
+        event_type: string
+        resource_type: string | null
+        resource_name: string | null
+        action: string
+        description: string
+        ip_address: string | null
+        status_code: number | null
+        is_sensitive: boolean
+        created_at: string
+      }>
+      total: number
+      page: number
+      page_size: number
+      total_pages: number
+    }>(`/audit/audit-logs?${qs.toString()}`)
+  },
+  getAuditLogDetail: (logId: string) =>
+    request<{
+      id: string
+      user_id: number | null
+      user_email: string | null
+      event_type: string
+      resource_type: string | null
+      resource_id: string | null
+      resource_name: string | null
+      action: string
+      description: string
+      ip_address: string | null
+      user_agent: string | null
+      request_id: string | null
+      method: string | null
+      path: string | null
+      before_state: Record<string, unknown> | null
+      after_state: Record<string, unknown> | null
+      metadata: Record<string, unknown>
+      status_code: number | null
+      error_message: string | null
+      is_sensitive: boolean
+      retention_days: number
+      created_at: string
+    }>(`/audit/audit-logs/${logId}`),
+  getAuditStats: (days = 30) =>
+    request<{
+      total_events: number
+      events_by_type: Record<string, number>
+      events_by_user: Record<string, number>
+      sensitive_events: number
+      date_range: { start: string; end: string }
+    }>(`/audit/audit-stats?days=${days}`),
+  exportAuditLogsCSV: () =>
+    request<Blob>('/audit/compliance/export-csv').then(() => {
+      // Handled separately for blob download
+    }),
+  gdprExport: (email: string, options?: Record<string, boolean>) =>
+    request<Record<string, unknown>>('/audit/gdpr/export', {
+      method: 'POST',
+      body: JSON.stringify({ email, ...(options || {}) }),
+    }),
+  gdprDelete: (email: string, dryRun = true) =>
+    request<Record<string, unknown>>(
+      `/audit/gdpr/delete?email=${encodeURIComponent(email)}&dry_run=${dryRun}`,
+      {
+        method: 'POST',
+      }
+    ),
+  getComplianceReport: (reportType = 'soc2', startDate?: string, endDate?: string) => {
+    const qs = new URLSearchParams({ report_type: reportType })
+    if (startDate) qs.set('start_date', startDate)
+    if (endDate) qs.set('end_date', endDate)
+    return request<Record<string, unknown>>(`/audit/compliance/report?${qs.toString()}`)
+  },
+  getPermissionChanges: (days = 30) =>
+    request<{ total: number; changes: Array<Record<string, unknown>> }>(
+      `/audit/compliance/permission-changes?days=${days}`
+    ),
+
+  // --- Smart Alerts ---
+  getAlertRules: () =>
+    request<
+      Array<{
+        id: string
+        name: string
+        metric: string
+        condition: string
+        threshold_value: number | null
+        is_active: boolean
+        notification_type: string
+        use_anomaly_detection: boolean
+        cooldown_seconds: number
+        description: string | null
+        created_at: string
+        last_triggered_at: string | null
+      }>
+    >('/alerts/rules'),
+  createAlertRule: (payload: {
+    name: string
+    metric: string
+    condition: string
+    threshold_value?: number
+    notification_type?: string
+    use_anomaly_detection?: boolean
+    anomaly_std_devs?: number
+    cooldown_seconds?: number
+    description?: string
+  }) =>
+    request<Record<string, unknown>>('/alerts/rules', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  updateAlertRule: (ruleId: string, payload: Record<string, unknown>) =>
+    request<{ success: boolean; rule_id: string }>(`/alerts/rules/${ruleId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  deleteAlertRule: (ruleId: string) =>
+    request<{ success: boolean }>(`/alerts/rules/${ruleId}`, { method: 'DELETE' }),
+  getAlertNotifications: (unreadOnly = false, page = 1, pageSize = 20) =>
+    request<{
+      notifications: Array<{
+        id: string
+        rule_id: string
+        metric: string
+        current_value: number
+        threshold_value: number | null
+        condition: string
+        title: string
+        message: string
+        severity: string
+        trend: string | null
+        recommended_action: string | null
+        is_read: boolean
+        created_at: string
+      }>
+      total: number
+      unread: number
+      page: number
+      page_size: number
+      total_pages: number
+    }>(`/alerts/notifications?unread_only=${unreadOnly}&page=${page}&page_size=${pageSize}`),
+  markAlertRead: (notificationId: string) =>
+    request<{ success: boolean }>(`/alerts/notifications/${notificationId}/read`, {
+      method: 'PUT',
+    }),
+  markAllAlertsRead: () =>
+    request<{ success: boolean }>('/alerts/notifications/read-all', { method: 'PUT' }),
+  getAlertStats: (days = 7) =>
+    request<{
+      total_alerts: number
+      unread: number
+      critical: number
+      by_metric: Record<string, number>
+      active_rules: number
+      period_days: number
+    }>(`/alerts/stats?days=${days}`),
+  getAvailableMetrics: () =>
+    request<{ metrics: Record<string, { label: string; unit: string; description: string }> }>(
+      '/alerts/available-metrics'
+    ),
 }

@@ -15,6 +15,10 @@ depends_on = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    if bind.dialect.name != "postgresql":
+        return
+
     # Align with the design doc's Supabase RLS strategy.
     op.execute("ALTER TABLE data_files ENABLE ROW LEVEL SECURITY;")
     op.execute("ALTER TABLE analysis_history ENABLE ROW LEVEL SECURITY;")
@@ -34,6 +38,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    bind = op.get_bind()
+    if bind.dialect.name != "postgresql":
+        return
+
     op.execute('DROP POLICY IF EXISTS "Users can only view their own analysis" ON analysis_history;')
     op.execute('DROP POLICY IF EXISTS "Users can only view their own files" ON data_files;')
     op.execute("ALTER TABLE analysis_history DISABLE ROW LEVEL SECURITY;")

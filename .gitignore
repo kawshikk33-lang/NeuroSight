@@ -17,3 +17,11 @@ __pycache__/
 # Env
 .venv/
 .env
+
+# Local tooling/editor settings
+.cursor/
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3

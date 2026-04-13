@@ -5,12 +5,13 @@ import io
 from typing import List
 
 import pandas as pd
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
+from app.services.audit_logger import AuditLogger
 from app.services.data_storage_service import DataStorageService
 
 router = APIRouter()
@@ -38,14 +39,12 @@ def _validate_file(file: UploadFile) -> None:
             detail=f"Only CSV or Excel files ({', '.join(ALLOWED_EXTENSIONS)}) are allowed",
         )
 
-    # Check MIME type if provided
     if file.content_type and file.content_type not in ALLOWED_MIME_TYPES:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid file type: {file.content_type}. Allowed types: {', '.join(ALLOWED_MIME_TYPES)}",
+            detail=f"Invalid file type: {file.content_type}",
         )
 
-    # Read and validate size
     content = file.file.read()
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(
@@ -56,42 +55,35 @@ def _validate_file(file: UploadFile) -> None:
     if not content or len(content) == 0:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
 
-    # Validate content based on extension
     try:
         if extension == "csv":
-            # Try to parse as CSV to validate content
             text_content = content.decode("utf-8")
             reader = csv.reader(io.StringIO(text_content))
             rows = list(reader)
             if len(rows) < 2:
                 raise HTTPException(status_code=400, detail="CSV file must have a header row and at least one data row")
         else:
-            # Try to parse as Excel file
             pd.read_excel(io.BytesIO(content), nrows=1)
     except UnicodeDecodeError:
         raise HTTPException(status_code=400, detail="File is not a valid CSV (encoding error)")
     except Exception:
         raise HTTPException(status_code=400, detail=f"File content is not valid {extension.upper()} format")
 
-    # Reset file pointer after validation
     file.file.seek(0)
 
 
 @router.post("/upload")
 async def upload_file(
+    request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Upload a CSV/Excel file and return file information."""
-    # Validate file (extension, MIME, size, content)
     _validate_file(file)
 
     try:
-        # Read file content (after validation reset pointer)
         content = await file.read()
-
-        # Save file and get metadata
         file_info = await DataStorageService.save_uploaded_file(
             file.filename,
             content,
@@ -99,10 +91,20 @@ async def upload_file(
             user_id=current_user.id,
         )
 
-        return {
-            "success": True,
-            "file": file_info
-        }
+        AuditLogger.log(
+            db=db,
+            request=request,
+            user=current_user,
+            event_type="file_upload",
+            action="create",
+            description=f"User uploaded {file.filename}",
+            resource_type="file",
+            resource_id=file_info.get("id"),
+            resource_name=file.filename,
+            metadata={"size_bytes": file_info.get("size_bytes"), "columns": file_info.get("column_names")},
+        )
+
+        return {"success": True, "file": file_info}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
@@ -182,6 +184,7 @@ async def get_combined_data(
 
 @router.delete("/files/{filename}")
 async def delete_file(
+    request: Request,
     filename: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -189,6 +192,16 @@ async def delete_file(
     """Delete an uploaded file."""
     try:
         if await DataStorageService.delete_file(filename, db=db, user_id=current_user.id):
+            AuditLogger.log(
+                db=db,
+                request=request,
+                user=current_user,
+                event_type="file_delete",
+                action="delete",
+                description=f"User deleted file {filename}",
+                resource_type="file",
+                resource_name=filename,
+            )
             return {"success": True, "message": f"File {filename} deleted"}
         else:
             raise HTTPException(status_code=404, detail="File not found")

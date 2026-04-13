@@ -12,6 +12,7 @@ from app.schemas.auth import (
     TokenResponse,
     UserResponse,
 )
+from app.services.audit_logger import AuditLogger
 from app.services.auth_service import login, register_user
 from app.services.supabase_client import supabase_client
 
@@ -21,13 +22,37 @@ router = APIRouter()
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("5/minute")
 async def login_route(request: Request, payload: LoginRequest, db: Session = Depends(get_db)):
-    return await login(db, payload.email, payload.password)
+    result = await login(db, payload.email, payload.password)
+    AuditLogger.log(
+        db=db,
+        request=request,
+        event_type="login",
+        action="execute",
+        description=f"Login attempt for {payload.email}",
+        resource_type="user",
+        resource_name=payload.email,
+        status_code=200,
+        is_sensitive=True,
+    )
+    return result
 
 
 @router.post("/register", response_model=UserResponse)
 @limiter.limit("3/minute")
 async def register_route(request: Request, payload: RegisterRequest, db: Session = Depends(get_db)):
-    return await register_user(db, payload.full_name, payload.email, payload.password)
+    result = await register_user(db, payload.full_name, payload.email, payload.password)
+    AuditLogger.log(
+        db=db,
+        request=request,
+        event_type="register",
+        action="create",
+        description=f"New user registered: {payload.email}",
+        resource_type="user",
+        resource_name=payload.email,
+        status_code=201,
+        is_sensitive=True,
+    )
+    return result
 
 
 @router.post("/refresh", response_model=TokenResponse)

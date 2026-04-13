@@ -1,7 +1,7 @@
 """add engineered features table
 
 Revision ID: 0004_add_engineered_features
-Revises: 0003_enable_supabase_rls_policies
+Revises: 0003_supabase_rls
 Create Date: 2026-04-13
 """
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = "0004_add_engineered_features"
-down_revision = "0003_enable_supabase_rls_policies"
+down_revision = "0003_supabase_rls"
 branch_labels = None
 depends_on = None
 

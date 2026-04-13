@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from io import StringIO
 
 import pandas as pd
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -12,6 +12,7 @@ from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.analysis_history import AnalysisHistory
 from app.models.user import User
+from app.services.audit_logger import AuditLogger
 from app.services.data_storage_service import DataStorageService
 from app.services.ml_service import parse_csv_bytes, train_rfmq_model
 from app.tasks.jobs import rfmq_analyze_task
@@ -402,6 +403,7 @@ async def validate_mappings(
 
 @router.post("/analyze")
 async def analyze(
+    request: Request,
     payload: AnalyzePayload,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
@@ -442,6 +444,19 @@ async def analyze(
     )
     db.add(history_entry)
     db.commit()
+
+    AuditLogger.log(
+        db=db,
+        request=request,
+        user=current_user,
+        event_type="analysis_run",
+        action="execute",
+        description=f"RFMQ analysis on {payload.dataset_id}: {len(customers)} customers, {len(segments)} segments",
+        resource_type="analysis",
+        resource_name=f"RFMQ - {payload.dataset_id}",
+        status_code=200,
+        metadata={"dataset_id": payload.dataset_id, "range_type": payload.range_type, "customers": len(customers)},
+    )
 
     job_id = f"rfmq-job-{len(customers)}"
     try:
