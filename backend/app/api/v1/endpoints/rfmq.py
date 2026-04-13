@@ -27,9 +27,6 @@ SEGMENT_COLORS = {
     "Lost": "#ef4444",
 }
 
-_latest_customers: list[dict] = []
-_latest_segments: list[dict] = []
-
 
 class MappingPayload(BaseModel):
     dataset_id: str
@@ -410,7 +407,6 @@ async def analyze(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    global _latest_customers, _latest_segments
 
     dataset = await DataStorageService.get_file_data(payload.dataset_id, db=db, user_id=current_user.id)
     if dataset is None:
@@ -426,9 +422,6 @@ async def analyze(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    _latest_segments = segments
-    _latest_customers = customers
 
     history_entry = AnalysisHistory(
         user_id=current_user.id,
@@ -467,28 +460,106 @@ async def analyze(
 
 
 @router.get("/segments")
-def segments():
-    return _latest_segments
+def segments(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get latest RFMQ segments from database."""
+    latest = (
+        db.query(AnalysisHistory)
+        .filter(
+            AnalysisHistory.user_id == current_user.id,
+            AnalysisHistory.type == "rfmq",
+        )
+        .order_by(AnalysisHistory.created_at.desc())
+        .first()
+    )
+    if not latest:
+        return []
+    return latest.result_data.get("segments", [])
 
 
 @router.get("/customers")
-def customers(segment: str | None = Query(default=None)):
+def customers(
+    segment: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1, description="Page number"),
+    page_size: int = Query(default=50, ge=1, le=500, description="Items per page"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get latest RFMQ customers from database, optionally filtered by segment with pagination."""
+    latest = (
+        db.query(AnalysisHistory)
+        .filter(
+            AnalysisHistory.user_id == current_user.id,
+            AnalysisHistory.type == "rfmq",
+        )
+        .order_by(AnalysisHistory.created_at.desc())
+        .first()
+    )
+    if not latest:
+        return {"customers": [], "total": 0, "page": 1, "page_size": 50, "total_pages": 0}
+
+    all_customers = latest.result_data.get("customers", [])
     if segment:
-        return [c for c in _latest_customers if c["segment"] == segment]
-    return _latest_customers
+        all_customers = [c for c in all_customers if c["segment"] == segment]
+
+    total = len(all_customers)
+    total_pages = (total + page_size - 1) // page_size
+    start = (page - 1) * page_size
+    end = start + page_size
+    paginated_customers = all_customers[start:end]
+
+    return {
+        "customers": paginated_customers,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+    }
 
 
 @router.get("/export")
-def export_all():
-    csv_content = _build_csv(_latest_customers)
-    return Response(content=csv_content, media_type="text/csv")
+def export_all(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Export all customers as CSV from database."""
+    latest = (
+        db.query(AnalysisHistory)
+        .filter(
+            AnalysisHistory.user_id == current_user.id,
+            AnalysisHistory.type == "rfmq",
+        )
+        .order_by(AnalysisHistory.created_at.desc())
+        .first()
+    )
+    if not latest:
+        return Response(content="", media_type="text/csv")
+    return Response(content=_build_csv(latest.result_data.get("customers", [])), media_type="text/csv")
 
 
 @router.get("/export/{segment}")
-def export_segment(segment: str):
-    rows = [c for c in _latest_customers if c["segment"].lower() == segment.lower()]
-    csv_content = _build_csv(rows)
-    return Response(content=csv_content, media_type="text/csv")
+def export_segment(
+    segment: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Export specific segment customers as CSV from database."""
+    latest = (
+        db.query(AnalysisHistory)
+        .filter(
+            AnalysisHistory.user_id == current_user.id,
+            AnalysisHistory.type == "rfmq",
+        )
+        .order_by(AnalysisHistory.created_at.desc())
+        .first()
+    )
+    if not latest:
+        return Response(content="", media_type="text/csv")
+    all_customers = latest.result_data.get("customers", [])
+    rows = [c for c in all_customers if c["segment"].lower() == segment.lower()]
+    return Response(content=_build_csv(rows), media_type="text/csv")
 
 
 @router.post("/train")

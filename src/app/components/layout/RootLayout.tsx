@@ -1,24 +1,24 @@
-import { Outlet, Link, useLocation, useNavigate } from "react-router";
-import { Cpu, LogOut } from "lucide-react";
-import { apiClient } from "../../services/api/client";
-import { sidebarRouteConfigs } from "../../config/appRoutes";
+import { Cpu, LogOut } from 'lucide-react'
+import { Outlet, Link, useLocation, useNavigate } from 'react-router'
+
+import { sidebarRouteConfigs } from '../../config/appRoutes'
+import { apiClient } from '../../services/api/client'
 
 export function RootLayout() {
-  const location = useLocation();
-  const navigate = useNavigate();
+  const location = useLocation()
+  const navigate = useNavigate()
   const role =
     apiClient.getStoredUser()?.role ??
-    (typeof window !== "undefined" ? window.localStorage.getItem("userRole") : null);
-  const isAdmin = role === "admin";
-  const filteredNavItems = sidebarRouteConfigs.filter(
-    (item) => !item.adminOnly || isAdmin
-  );
+    (typeof window !== 'undefined' ? window.localStorage.getItem('userRole') : null)
+  const isAdmin = role === 'admin'
+  const filteredNavItems = sidebarRouteConfigs.filter((item) => !item.adminOnly || isAdmin)
 
   const handleLogout = () => {
-    localStorage.removeItem("user");
-    localStorage.removeItem("token");
-    navigate("/auth");
-  };
+    apiClient.clearTokens()
+    localStorage.removeItem('userRole')
+    localStorage.removeItem('isAdmin')
+    navigate('/auth', { replace: true })
+  }
 
   return (
     <div className="flex h-screen bg-slate-950 text-slate-100">
@@ -43,25 +43,25 @@ export function RootLayout() {
         <nav className="flex-1 p-4">
           <ul className="space-y-2">
             {filteredNavItems.map((item) => {
-              const Icon = item.icon;
-              const itemPath = `/${item.path}`;
-              const isActive = location.pathname === itemPath;
-              
+              const Icon = item.icon
+              const itemPath = `/${item.path}`
+              const isActive = location.pathname === itemPath
+
               return (
                 <li key={itemPath}>
                   <Link
                     to={itemPath}
                     className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
                       isActive
-                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                        : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                        : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
                     }`}
                   >
                     <Icon className="w-5 h-5" />
                     <span className="font-medium">{item.label}</span>
                   </Link>
                 </li>
-              );
+              )
             })}
           </ul>
         </nav>
@@ -87,5 +87,5 @@ export function RootLayout() {
         <Outlet />
       </main>
     </div>
-  );
+  )
 }

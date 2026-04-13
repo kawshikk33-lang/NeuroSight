@@ -1,0 +1,12 @@
+{
+  "src/**/*.{ts,tsx}": [
+    "eslint --fix",
+    "prettier --write"
+  ],
+  "src/**/*.{css,json,md}": [
+    "prettier --write"
+  ],
+  "backend/**/*.py": [
+    "backend\\.venv\\Scripts\\python.exe -m compileall"
+  ]
+}

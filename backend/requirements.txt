@@ -6,7 +6,7 @@ alembic
 pydantic-settings
 python-jose[cryptography]
 passlib[bcrypt]
-bcrypt==3.2.2
+bcrypt>=4.0.0
 python-multipart
 email-validator
 mlflow
@@ -20,3 +20,4 @@ xlrd
 python-dotenv
 httpx
 pytest
+slowapi==0.1.9

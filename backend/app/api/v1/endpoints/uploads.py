@@ -1,9 +1,12 @@
 """Endpoints for file upload and data management."""
 
+import csv
+import io
+from typing import List
+
+import pandas as pd
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
-from typing import List
-import pandas as pd
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
@@ -11,6 +14,67 @@ from app.models.user import User
 from app.services.data_storage_service import DataStorageService
 
 router = APIRouter()
+
+# Constants
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+ALLOWED_EXTENSIONS = {"csv", "xlsx", "xls", "xlsm"}
+ALLOWED_MIME_TYPES = {
+    "text/csv",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel.sheet.macroEnabled.12",
+}
+
+
+def _validate_file(file: UploadFile) -> None:
+    """Validate file extension, MIME type, size, and content."""
+    if not file.filename or "." not in file.filename:
+        raise HTTPException(status_code=400, detail="File must have a valid extension")
+
+    extension = file.filename.rsplit(".", 1)[-1].lower()
+    if extension not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Only CSV or Excel files ({', '.join(ALLOWED_EXTENSIONS)}) are allowed",
+        )
+
+    # Check MIME type if provided
+    if file.content_type and file.content_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type: {file.content_type}. Allowed types: {', '.join(ALLOWED_MIME_TYPES)}",
+        )
+
+    # Read and validate size
+    content = file.file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File size exceeds maximum allowed size of {MAX_FILE_SIZE / (1024 * 1024):.0f} MB",
+        )
+
+    if not content or len(content) == 0:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+    # Validate content based on extension
+    try:
+        if extension == "csv":
+            # Try to parse as CSV to validate content
+            text_content = content.decode("utf-8")
+            reader = csv.reader(io.StringIO(text_content))
+            rows = list(reader)
+            if len(rows) < 2:
+                raise HTTPException(status_code=400, detail="CSV file must have a header row and at least one data row")
+        else:
+            # Try to parse as Excel file
+            pd.read_excel(io.BytesIO(content), nrows=1)
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="File is not a valid CSV (encoding error)")
+    except Exception:
+        raise HTTPException(status_code=400, detail=f"File content is not valid {extension.upper()} format")
+
+    # Reset file pointer after validation
+    file.file.seek(0)
 
 
 @router.post("/upload")
@@ -20,17 +84,13 @@ async def upload_file(
     current_user: User = Depends(get_current_user),
 ):
     """Upload a CSV/Excel file and return file information."""
+    # Validate file (extension, MIME, size, content)
+    _validate_file(file)
+
     try:
-        # Validate file type
-        extension = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else ""
-        if extension not in {"csv", "xlsx", "xls", "xlsm"}:
-            raise HTTPException(status_code=400, detail="Only CSV or Excel files (.csv, .xlsx, .xls, .xlsm) are allowed")
-        
-        # Read file content
+        # Read file content (after validation reset pointer)
         content = await file.read()
-        if not content:
-            raise HTTPException(status_code=400, detail="Uploaded file is empty")
-        
+
         # Save file and get metadata
         file_info = await DataStorageService.save_uploaded_file(
             file.filename,
@@ -38,7 +98,7 @@ async def upload_file(
             db=db,
             user_id=current_user.id,
         )
-        
+
         return {
             "success": True,
             "file": file_info

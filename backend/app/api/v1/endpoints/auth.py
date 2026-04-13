@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from httpx import HTTPStatusError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.limiter import limiter
 from app.db.session import get_db
 from app.schemas.auth import (
     LoginRequest,
@@ -19,17 +19,20 @@ router = APIRouter()
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login_route(payload: LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+async def login_route(request: Request, payload: LoginRequest, db: Session = Depends(get_db)):
     return await login(db, payload.email, payload.password)
 
 
 @router.post("/register", response_model=UserResponse)
-async def register_route(payload: RegisterRequest, db: Session = Depends(get_db)):
+@limiter.limit("3/minute")
+async def register_route(request: Request, payload: RegisterRequest, db: Session = Depends(get_db)):
     return await register_user(db, payload.full_name, payload.email, payload.password)
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh_route(payload: RefreshRequest):
+@limiter.limit("10/minute")
+async def refresh_route(request: Request, payload: RefreshRequest):
     try:
         refreshed = await supabase_client.refresh_session(payload.refresh_token)
         return {

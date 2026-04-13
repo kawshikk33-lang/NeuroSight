@@ -1,8 +1,8 @@
 from __future__ import annotations
-
+import uuid
 from datetime import date
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -13,7 +13,6 @@ from app.services.ml_service import parse_csv_bytes, train_forecast_model
 from app.tasks.jobs import forecast_batch_task, models_train_task
 
 router = APIRouter()
-_forecast_jobs: dict[str, dict] = {}
 
 
 def _period_label(forecast_type: str, start_date: date, index: int) -> str:
@@ -120,24 +119,79 @@ def forecast(
 
 
 @router.post("/batch")
-async def batch(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
-    job_id = f"forecast-job-{len(_forecast_jobs) + 1}"
-    _forecast_jobs[job_id] = {"status": "queued", "filename": file.filename}
+async def batch(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Start a batch forecast job and persist status in database."""
+    job_id = f"forecast-job-{uuid.uuid4().hex[:8]}"
+
+    # Persist job status to analysis_history table
+    job_entry = AnalysisHistory(
+        user_id=current_user.id,
+        file_id=None,
+        type="forecast_batch",
+        input_config={"filename": file.filename, "job_id": job_id},
+        result_data={"status": "queued", "filename": file.filename},
+    )
+    db.add(job_entry)
+    db.commit()
+
     try:
         background_tasks.add_task(forecast_batch_task, job_id)
     except Exception as exc:
-        return {"error": str(exc)}
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"job_id": job_id, "status": "started", "message": "Batch forecast running in background"}
 
 
 @router.get("/jobs/{job_id}")
-def job_status(job_id: str):
-    return _forecast_jobs.get(job_id, {"job_id": job_id, "status": "unknown"})
+def job_status(
+    job_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get batch forecast job status from database."""
+    job = (
+        db.query(AnalysisHistory)
+        .filter(
+            AnalysisHistory.user_id == current_user.id,
+            AnalysisHistory.type == "forecast_batch",
+            AnalysisHistory.input_config["job_id"].as_string() == job_id,
+        )
+        .first()
+    )
+    if not job:
+        return {"job_id": job_id, "status": "unknown"}
+    return {"job_id": job_id, **job.result_data}
 
 
 @router.get("/history")
-def history():
-    return [{"id": "f-1", "customer_id": "C001", "prediction": 1234.5}]
+def forecast_history(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get forecast history from database."""
+    entries = (
+        db.query(AnalysisHistory)
+        .filter(
+            AnalysisHistory.user_id == current_user.id,
+            AnalysisHistory.type == "forecast",
+        )
+        .order_by(AnalysisHistory.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    return [
+        {
+            "id": entry.id,
+            "created_at": entry.created_at.isoformat(),
+            "input_config": entry.input_config,
+            "result_data": entry.result_data,
+        }
+        for entry in entries
+    ]
 
 
 @router.post("/train")
