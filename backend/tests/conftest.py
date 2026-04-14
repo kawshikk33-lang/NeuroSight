@@ -53,26 +53,32 @@ def client(db_session):
 @pytest.fixture
 def mock_supabase_client():
     """Mock Supabase client to avoid external API calls."""
-    with patch("app.services.supabase_client.supabase_client") as mock:
-        mock.sign_in = AsyncMock(return_value={
+    from app.services.supabase_client import supabase_client
+    
+    with patch.object(supabase_client, "sign_in", new_callable=AsyncMock) as mock_sign_in, \
+         patch.object(supabase_client, "sign_up", new_callable=AsyncMock) as mock_sign_up, \
+         patch.object(supabase_client, "get_user", new_callable=AsyncMock) as mock_get_user, \
+         patch.object(supabase_client, "refresh_session", new_callable=AsyncMock) as mock_refresh:
+         
+        mock_sign_in.return_value = {
             "access_token": "test-access-token",
             "refresh_token": "test-refresh-token",
             "user": {"email": "test@example.com", "id": "test-user-id"},
-        })
-        mock.sign_up = AsyncMock(return_value={
+        }
+        mock_sign_up.return_value = {
             "access_token": "test-access-token",
             "refresh_token": "test-refresh-token",
             "user": {"email": "newuser@example.com", "id": "new-user-id"},
-        })
-        mock.get_user = AsyncMock(return_value={
+        }
+        mock_get_user.return_value = {
             "email": "test@example.com",
             "id": "test-user-id",
-        })
-        mock.refresh_session = AsyncMock(return_value={
+        }
+        mock_refresh.return_value = {
             "access_token": "new-access-token",
             "refresh_token": "new-refresh-token",
-        })
-        yield mock
+        }
+        yield supabase_client
 
 
 @pytest.fixture
