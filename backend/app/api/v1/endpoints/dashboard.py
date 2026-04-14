@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -15,20 +15,24 @@ def kpis(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    data = dashboard_data()["kpis"]
-
-    # Check alert rules for each KPI metric
-    for metric, value in data.items():
-        if isinstance(value, (int, float)):
-            AlertService.check_and_trigger(
-                db=db,
-                user_id=current_user.id,
-                metric=metric,
-                current_value=float(value),
-            )
-
-    db.commit()
-    return data
+    try:
+        data = dashboard_data()["kpis"]
+    
+        # Check alert rules for each KPI metric
+        for metric, value in data.items():
+            if isinstance(value, (int, float)):
+                AlertService.check_and_trigger(
+                    db=db,
+                    user_id=current_user.id,
+                    metric=metric,
+                    current_value=float(value),
+                )
+    
+        db.commit()
+        return data
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/forecast-trend")

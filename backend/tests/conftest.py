@@ -39,10 +39,12 @@ def db_session():
 def client(db_session):
     """Test client with overridden database dependency."""
 
+    from app.db.session import get_db
+    
     def override_get_db():
         yield db_session
 
-    app.dependency_overrides["get_db"] = override_get_db
+    app.dependency_overrides[get_db] = override_get_db
 
     with TestClient(app) as test_client:
         yield test_client
