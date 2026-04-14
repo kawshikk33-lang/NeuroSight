@@ -20,4 +20,5 @@ xlrd
 python-dotenv
 httpx
 pytest
+pytest-cov
 slowapi==0.1.9
