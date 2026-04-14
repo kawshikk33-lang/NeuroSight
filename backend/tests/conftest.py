@@ -82,7 +82,7 @@ def test_user(db_session):
     user = User(
         email="test@example.com",
         full_name="Test User",
-        hashed_password=get_password_hash("testpassword"[:72]),
+        hashed_password=get_password_hash("testpassword"),
         role="viewer",
         is_active=True,
     )
@@ -99,7 +99,7 @@ def admin_user(db_session):
     user = User(
         email="admin@example.com",
         full_name="Admin User",
-        hashed_password=get_password_hash("adminpassword"[:72]),
+        hashed_password=get_password_hash("adminpassword"),
         role="admin",
         is_active=True,
     )
