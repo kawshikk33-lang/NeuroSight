@@ -7,13 +7,16 @@ import { AdminPage } from './pages/AdminPage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
 import { AuthPage } from './pages/AuthPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { DatabaseDashboardPage } from './pages/DatabaseDashboardPage'
+import { DataConnectorsPage } from './pages/DataConnectorsPage'
+import { FacebookAdsDashboardPage } from './pages/FacebookAdsDashboardPage'
 import { ForecastPage } from './pages/ForecastPage'
+import { GoogleAdsDashboardPage } from './pages/GoogleAdsDashboardPage'
 import { LandingPage } from './pages/LandingPage'
 import { ModelsPage } from './pages/ModelsPage'
 import { RFMQPage } from './pages/RFMQPage'
 import { SettingsPage } from './pages/SettingsPage'
 
-// Wrap each route with ErrorBoundary
 const eb = (Component: React.ComponentType) => (
   <ErrorBoundary>
     <Component />
@@ -32,6 +35,10 @@ export const router = createBrowserRouter([
       { path: 'rfmq', element: eb(RFMQPage) },
       { path: 'analytics', element: eb(AnalyticsPage) },
       { path: 'models', element: eb(ModelsPage) },
+      { path: 'connectors', element: eb(DataConnectorsPage) },
+      { path: 'connectors/database', element: eb(DatabaseDashboardPage) },
+      { path: 'connectors/facebook', element: eb(FacebookAdsDashboardPage) },
+      { path: 'connectors/google', element: eb(GoogleAdsDashboardPage) },
       { path: 'settings', element: eb(SettingsPage) },
       {
         path: 'admin/portal',

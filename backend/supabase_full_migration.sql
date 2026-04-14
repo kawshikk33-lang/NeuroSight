@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS alert_notifications (
     severity            VARCHAR(20) NOT NULL DEFAULT 'warning',
     trend               VARCHAR(50),
     recommended_action  TEXT,
-    context             JSONB NOT NULL DEFAULT '{}',
+    context             VARCHAR(2048) NOT NULL DEFAULT '{}',
     is_read             BOOLEAN NOT NULL DEFAULT false,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -291,3 +291,6 @@ SELECT trigger_name, event_manipulation, event_object_table
 FROM information_schema.triggers
 WHERE event_object_table = 'audit_logs';
 -- Expected: trigger_prevent_audit_log_update
+
+-- Check migration tracking (should be latest):
+SELECT version_num FROM public.app_alembic_version;

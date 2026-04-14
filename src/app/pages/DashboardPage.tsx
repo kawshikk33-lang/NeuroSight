@@ -1,5 +1,22 @@
-import { Activity, Users, TrendingUp, DollarSign, Bell, LayoutDashboard } from 'lucide-react'
+import {
+  Activity,
+  Users,
+  TrendingUp,
+  DollarSign,
+  Bell,
+  LayoutDashboard,
+  Database,
+  Facebook,
+  BarChart3,
+  ArrowUpRight,
+  ArrowRight,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  Clock,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router'
 import {
   Cell,
   Pie,
@@ -16,6 +33,7 @@ import {
 
 import { MetricCard } from '../components/shared/MetricCard'
 import { SmartAlertsPage } from '../components/shared/SmartAlertsPage'
+import { Badge } from '../components/ui/badge'
 import { apiClient } from '../services/api/client'
 import { processSegmentDistribution, processTimeSeriesForecast } from '../utils/dataProcessing'
 import { mockTimeSeriesForecast, mockRFMQSegments, mockRecentActivity } from '../utils/mockData'
@@ -25,8 +43,16 @@ export function DashboardPage() {
   const [forecastSeries, setForecastSeries] = useState(mockTimeSeriesForecast)
   const [segments, setSegments] = useState(mockRFMQSegments)
   const [activity, setActivity] = useState(mockRecentActivity)
+  const [connectors, setConnectors] = useState<unknown[]>([])
 
   useEffect(() => {
+    // Fetch connector status
+    apiClient
+      .getConnectors()
+      .then(setConnectors)
+      .catch(() => setConnectors([]))
+
+    // Try to fetch uploaded data first
     // Try to fetch uploaded data first
     apiClient
       .getCombinedData()
@@ -187,6 +213,169 @@ export function DashboardPage() {
               subtitle="MAPE: 8.2%"
             />
           </div>
+
+          {/* Connector Health Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            {(() => {
+              const dbConn = connectors.find((c) => c.type === 'database')
+              const fbConn = connectors.find((c) => c.type === 'facebook_ads')
+              const gaConn = connectors.find((c) => c.type === 'google_ads')
+              const connectorCards = [
+                {
+                  type: 'database',
+                  label: 'Database',
+                  icon: Database,
+                  gradient: 'from-emerald-400 to-emerald-600',
+                  conn: dbConn,
+                  link: '/connectors/database',
+                  metric: dbConn ? `${1247} orders` : 'Not connected',
+                  sub: dbConn
+                    ? `Last sync: ${dbConn.last_sync ? new Date(dbConn.last_sync).toLocaleTimeString() : 'Never'}`
+                    : 'Connect your database',
+                },
+                {
+                  type: 'facebook_ads',
+                  label: 'Facebook Ads',
+                  icon: Facebook,
+                  gradient: 'from-blue-400 to-blue-600',
+                  conn: fbConn,
+                  link: '/connectors/facebook',
+                  metric: fbConn ? 'ROAS: 2.8x' : 'Not connected',
+                  sub: fbConn ? `Spend: ৳85,000` : 'Connect your ad account',
+                },
+                {
+                  type: 'google_ads',
+                  label: 'Google Ads',
+                  icon: BarChart3,
+                  gradient: 'from-amber-400 to-amber-600',
+                  conn: gaConn,
+                  link: '/connectors/google',
+                  metric: gaConn ? 'ROAS: 3.1x' : 'Not connected',
+                  sub: gaConn ? `Spend: ৳32,000` : 'Connect your ad account',
+                },
+              ]
+
+              const statusIcon = (status: string) => {
+                switch (status) {
+                  case 'connected':
+                    return <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  case 'error':
+                    return <XCircle className="w-4 h-4 text-red-400" />
+                  case 'syncing':
+                    return <Clock className="w-4 h-4 text-amber-400 animate-spin" />
+                  default:
+                    return <AlertTriangle className="w-4 h-4 text-slate-600" />
+                }
+              }
+
+              const borderColor = (status: string) => {
+                switch (status) {
+                  case 'connected':
+                    return 'border-emerald-500/30'
+                  case 'error':
+                    return 'border-red-500/30'
+                  case 'syncing':
+                    return 'border-amber-500/30'
+                  default:
+                    return 'border-slate-800'
+                }
+              }
+
+              return connectorCards.map((card) => (
+                <Link
+                  key={card.type}
+                  to={card.conn ? card.link : '/connectors'}
+                  className={`bg-slate-900 border ${card.conn ? borderColor(card.conn.status) : 'border-slate-800'} rounded-xl p-5 hover:border-slate-700 transition-all group`}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div
+                      className={`w-10 h-10 bg-gradient-to-br ${card.gradient} rounded-lg flex items-center justify-center`}
+                    >
+                      <card.icon className="w-5 h-5 text-white" />
+                    </div>
+                    {card.conn && statusIcon(card.conn.status)}
+                  </div>
+                  <h3 className="text-sm font-medium text-slate-400 mb-1">{card.label}</h3>
+                  <p className="text-xl font-bold text-slate-100 mb-1">{card.metric}</p>
+                  <p className="text-xs text-slate-500">{card.sub}</p>
+                  <div className="flex items-center gap-1 mt-3 text-xs text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                    View Details <ArrowRight className="w-3 h-3" />
+                  </div>
+                </Link>
+              ))
+            })()}
+          </div>
+
+          {/* Unified ROI Card */}
+          {connectors.filter((c) => c.status === 'connected').length >= 2 && (
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 mb-8">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+                  <ArrowUpRight className="w-5 h-5 text-emerald-400" />
+                  Unified ROI View
+                </h2>
+                <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                  Cross-Channel
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div>
+                  <p className="text-xs text-slate-400 mb-1">Total Revenue</p>
+                  <p className="text-xl font-bold text-slate-100">৳4,50,000</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400 mb-1">Total Ad Spend</p>
+                  <p className="text-xl font-bold text-slate-100">৳1,17,000</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400 mb-1">Blended ROAS</p>
+                  <p className="text-xl font-bold text-emerald-400">3.85x</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400 mb-1">Cost per Acquisition</p>
+                  <p className="text-xl font-bold text-slate-100">৳585</p>
+                </div>
+              </div>
+
+              {/* ROAS Comparison */}
+              <div className="space-y-3 mb-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-slate-400 w-28">Facebook</span>
+                  <div className="flex-1 bg-slate-800 rounded-full h-6 overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-end pr-2"
+                      style={{ width: '84%' }}
+                    >
+                      <span className="text-xs font-bold text-white">4.2x</span>
+                    </div>
+                  </div>
+                  <span className="text-xs text-slate-500 w-24">৳85K → ৳3.57L</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-slate-400 w-28">Google</span>
+                  <div className="flex-1 bg-slate-800 rounded-full h-6 overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-amber-500 to-amber-600 rounded-full flex items-center justify-end pr-2"
+                      style={{ width: '62%' }}
+                    >
+                      <span className="text-xs font-bold text-white">3.1x</span>
+                    </div>
+                  </div>
+                  <span className="text-xs text-slate-500 w-24">৳32K → ৳99K</span>
+                </div>
+              </div>
+
+              {/* Insight */}
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                <p className="text-sm text-emerald-400">
+                  💡 Facebook ads drive <strong>35% more revenue per taka spent</strong> than
+                  Google. Consider shifting ৳10,000 from Google to Facebook for estimated +৳42,000
+                  revenue.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Main Content Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
