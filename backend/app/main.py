@@ -24,7 +24,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         # Remove server header
-        response.headers.pop("server", None)
+        if "server" in response.headers:
+            del response.headers["server"]
         return response
 
 app = FastAPI(title=settings.app_name)
