@@ -1,29 +1,22 @@
-import { Cpu, LogOut } from 'lucide-react'
-import { Outlet, Link, useLocation, useNavigate } from 'react-router'
+import { Cpu } from 'lucide-react'
+import { Outlet, Link, useLocation } from 'react-router'
 
 import { sidebarRouteConfigs } from '../../config/appRoutes'
 import { apiClient } from '../../services/api/client'
+import { ProfileDropdown } from '../shared/ProfileDropdown'
 
 export function RootLayout() {
   const location = useLocation()
-  const navigate = useNavigate()
   const role =
     apiClient.getStoredUser()?.role ??
     (typeof window !== 'undefined' ? window.localStorage.getItem('userRole') : null)
   const isAdmin = role === 'admin'
   const filteredNavItems = sidebarRouteConfigs.filter((item) => !item.adminOnly || isAdmin)
 
-  const handleLogout = () => {
-    apiClient.clearTokens()
-    localStorage.removeItem('userRole')
-    localStorage.removeItem('isAdmin')
-    navigate('/auth', { replace: true })
-  }
-
   return (
     <div className="flex h-screen bg-slate-950 text-slate-100">
       {/* Sidebar */}
-      <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col">
+      <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0">
         {/* Logo */}
         <div className="p-6 border-b border-slate-800">
           <div className="flex items-center gap-3">
@@ -40,8 +33,8 @@ export function RootLayout() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4">
-          <ul className="space-y-2">
+        <nav className="flex-1 p-4 overflow-y-auto">
+          <ul className="space-y-1">
             {filteredNavItems.map((item) => {
               const Icon = item.icon
               const itemPath = `/${item.path}`
@@ -66,26 +59,31 @@ export function RootLayout() {
           </ul>
         </nav>
 
-        {/* Footer */}
-        <div className="p-4 border-t border-slate-800 space-y-4">
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors border border-red-500/20"
-          >
-            <LogOut className="w-4 h-4" />
-            <span className="font-medium text-sm">Logout</span>
-          </button>
-          <div className="text-xs text-slate-500">
+        {/* Sidebar Footer */}
+        <div className="p-4 border-t border-slate-800">
+          <div className="text-xs text-slate-600">
             <p>v1.0.0</p>
-            <p className="mt-1">© 2026 NeuroSight</p>
           </div>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-auto">
-        <Outlet />
-      </main>
+      {/* Right Side */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top Header Bar */}
+        <header className="h-16 bg-slate-900/50 border-b border-slate-800 flex items-center justify-between px-6 shrink-0">
+          <div className="flex items-center gap-2 text-sm text-slate-500">
+            <span className="capitalize">{location.pathname.split('/')[1] || 'dashboard'}</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <ProfileDropdown />
+          </div>
+        </header>
+
+        {/* Main Content */}
+        <main className="flex-1 overflow-auto">
+          <Outlet />
+        </main>
+      </div>
     </div>
   )
 }

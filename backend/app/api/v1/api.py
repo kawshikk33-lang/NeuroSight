@@ -6,6 +6,7 @@ from app.api.v1.endpoints import (
     analytics,
     audit,
     auth,
+    connectors,
     dashboard,
     forecast,
     models,
@@ -24,3 +25,4 @@ api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(uploads.router, prefix="/uploads", tags=["uploads"])
 api_router.include_router(audit.router, prefix="/audit", tags=["audit", "compliance"])
 api_router.include_router(alerts.router, prefix="/alerts", tags=["alerts", "notifications"])
+api_router.include_router(connectors.router, prefix="/connectors", tags=["connectors", "data-sources"])

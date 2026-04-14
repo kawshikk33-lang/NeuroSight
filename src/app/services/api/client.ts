@@ -491,4 +491,40 @@ export const apiClient = {
     request<{ metrics: Record<string, { label: string; unit: string; description: string }> }>(
       '/alerts/available-metrics'
     ),
+
+  // --- Data Connectors ---
+  getConnectors: () =>
+    request<
+      Array<{
+        id: string
+        type: string
+        name: string
+        status: string
+        last_sync: string | null
+        sync_frequency: string
+        config: Record<string, unknown>
+        created_at: string
+      }>
+    >('/connectors'),
+  createConnector: (payload: {
+    type: string
+    name: string
+    config: Record<string, unknown>
+    sync_frequency: string
+  }) =>
+    request<Record<string, unknown>>('/connectors', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  testConnector: (type: string, config: Record<string, unknown>) =>
+    request<{ success: boolean; message: string }>(`/connectors/test`, {
+      method: 'POST',
+      body: JSON.stringify({ type, config }),
+    }),
+  syncConnector: (id: string) =>
+    request<{ success: boolean; message: string }>(`/connectors/${id}/sync`, {
+      method: 'POST',
+    }),
+  deleteConnector: (id: string) =>
+    request<{ success: boolean }>(`/connectors/${id}`, { method: 'DELETE' }),
 }

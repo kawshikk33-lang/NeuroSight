@@ -2,7 +2,7 @@
 -- NeuroSight — Complete Supabase Schema Update
 -- =====================================================
 -- Run this ENTIRE file in Supabase SQL Editor.
--- Creates: engineered_features, audit_logs, alert_rules, alert_notifications
+-- Creates: engineered_features, audit_logs, alert_rules, alert_notifications, data_connectors
 -- =====================================================
 -- Estimated time: < 2 minutes
 -- Safety: All statements use IF NOT EXISTS / idempotent patterns
@@ -118,8 +118,41 @@ CREATE INDEX IF NOT EXISTS ix_alert_notifications_created    ON alert_notificati
 
 
 -- =====================================================
+-- TABLE 5: data_connectors (external data sources)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS data_connectors (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name                VARCHAR(255) NOT NULL,
+    connector_type      VARCHAR(50) NOT NULL,  -- database, facebook_ads, google_ads
+    config              JSONB NOT NULL DEFAULT '{}',
+    status              VARCHAR(20) NOT NULL DEFAULT 'disconnected',
+    last_sync_at        TIMESTAMPTZ,
+    sync_frequency      VARCHAR(20) NOT NULL DEFAULT 'daily',
+    last_error          TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_data_connectors_user_id      ON data_connectors (user_id);
+CREATE INDEX IF NOT EXISTS ix_data_connectors_type         ON data_connectors (connector_type);
+CREATE INDEX IF NOT EXISTS ix_data_connectors_status       ON data_connectors (status);
+
+
+-- =====================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- =====================================================
+
+-- NOTE:
+-- Backend `users.id` is an INTEGER (not Supabase auth UUID). For RLS to work with
+-- PostgREST/Supabase, we read an integer `user_id` claim from the request JWT.
+-- Your API layer must mint JWTs that include `{"user_id": <int>}` in claims.
+CREATE OR REPLACE FUNCTION app_current_user_id_int()
+RETURNS INTEGER
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT (NULLIF(current_setting('request.jwt.claims', true), '')::json ->> 'user_id')::integer
+$$;
 
 -- Audit Logs: append-only, admin can see all, users see own
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
@@ -130,7 +163,7 @@ CREATE POLICY "Admins can view all audit logs"
     USING (
         EXISTS (
             SELECT 1 FROM users
-            WHERE users.id = auth.uid()
+            WHERE users.id = app_current_user_id_int()
             AND users.role = 'admin'
         )
     );
@@ -138,7 +171,7 @@ CREATE POLICY "Admins can view all audit logs"
 DROP POLICY IF EXISTS "Users can view their own audit logs" ON audit_logs;
 CREATE POLICY "Users can view their own audit logs"
     ON audit_logs FOR SELECT
-    USING (user_id = auth.uid());
+    USING (user_id = app_current_user_id_int());
 
 DROP POLICY IF EXISTS "No updates on audit logs" ON audit_logs;
 CREATE POLICY "No updates on audit logs"
@@ -155,8 +188,8 @@ ALTER TABLE alert_rules ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users manage own alert rules" ON alert_rules;
 CREATE POLICY "Users manage own alert rules"
     ON alert_rules FOR ALL
-    USING (user_id = auth.uid())
-    WITH CHECK (user_id = auth.uid());
+    USING (user_id = app_current_user_id_int())
+    WITH CHECK (user_id = app_current_user_id_int());
 
 
 -- Alert Notifications: users manage only their own
@@ -165,17 +198,43 @@ ALTER TABLE alert_notifications ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users view own notifications" ON alert_notifications;
 CREATE POLICY "Users view own notifications"
     ON alert_notifications FOR SELECT
-    USING (user_id = auth.uid());
+    USING (user_id = app_current_user_id_int());
 
 DROP POLICY IF EXISTS "Users update own notifications" ON alert_notifications;
 CREATE POLICY "Users update own notifications"
     ON alert_notifications FOR UPDATE
-    USING (user_id = auth.uid());
+    USING (user_id = app_current_user_id_int());
 
 DROP POLICY IF EXISTS "Users delete own notifications" ON alert_notifications;
 CREATE POLICY "Users delete own notifications"
     ON alert_notifications FOR DELETE
-    USING (user_id = auth.uid());
+    USING (user_id = app_current_user_id_int());
+
+
+-- Data Files + Analysis History: align existing RLS with integer users.id
+-- (Replaces earlier policies that compared INTEGER user_id to auth.uid() UUID.)
+ALTER TABLE data_files ENABLE ROW LEVEL SECURITY;
+ALTER TABLE analysis_history ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can only view their own files" ON data_files;
+CREATE POLICY "Users can only view their own files"
+    ON data_files FOR SELECT
+    USING (user_id = app_current_user_id_int());
+
+DROP POLICY IF EXISTS "Users can only view their own analysis" ON analysis_history;
+CREATE POLICY "Users can only view their own analysis"
+    ON analysis_history FOR SELECT
+    USING (user_id = app_current_user_id_int());
+
+
+-- Data Connectors: users manage only their own
+ALTER TABLE data_connectors ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users manage own connectors" ON data_connectors;
+CREATE POLICY "Users manage own connectors"
+    ON data_connectors FOR ALL
+    USING (user_id = app_current_user_id_int())
+    WITH CHECK (user_id = app_current_user_id_int());
 
 
 -- =====================================================
@@ -204,25 +263,26 @@ COMMENT ON TABLE engineered_features IS 'User-defined engineered features for mo
 COMMENT ON TABLE audit_logs IS 'Immutable audit log for compliance (SOC 2, GDPR). APPEND-ONLY. No UPDATE or DELETE allowed.';
 COMMENT ON TABLE alert_rules IS 'User-defined alert rules for metric monitoring and anomaly detection.';
 COMMENT ON TABLE alert_notifications IS 'Triggered alert notifications with severity, context, and recommended actions.';
+COMMENT ON TABLE data_connectors IS 'External data source connectors (database, Facebook Ads, Google Ads).';
 
 
 -- =====================================================
 -- VERIFICATION — run these queries after executing
 -- =====================================================
 
--- Check that all 4 tables were created:
+-- Check that all 5 tables were created:
 SELECT tablename
 FROM pg_tables
 WHERE schemaname = 'public'
-  AND tablename IN ('engineered_features', 'audit_logs', 'alert_rules', 'alert_notifications')
+  AND tablename IN ('engineered_features', 'audit_logs', 'alert_rules', 'alert_notifications', 'data_connectors')
 ORDER BY tablename;
--- Expected output: 4 rows
+-- Expected output: 5 rows
 
 -- Check RLS is enabled on all tables:
 SELECT tablename, rowsecurity
 FROM pg_tables
 WHERE schemaname = 'public'
-  AND tablename IN ('engineered_features', 'audit_logs', 'alert_rules', 'alert_notifications')
+  AND tablename IN ('engineered_features', 'audit_logs', 'alert_rules', 'alert_notifications', 'data_connectors')
 ORDER BY tablename;
 -- Expected: all should show 't' (true)
 
