@@ -1,17 +1,37 @@
-import { Cpu } from 'lucide-react'
+import {
+  Cpu,
+  ChevronDown,
+  ChevronRight,
+  Database,
+  Facebook,
+  BarChart3,
+  Link,
+  Settings,
+} from 'lucide-react'
+import { useState } from 'react'
 import { Outlet, Link, useLocation } from 'react-router'
 
 import { sidebarRouteConfigs } from '../../config/appRoutes'
 import { apiClient } from '../../services/api/client'
 import { ProfileDropdown } from '../shared/ProfileDropdown'
 
+const dataHubItems = [
+  { path: '/connectors/database', label: 'Database', icon: Database, color: 'text-emerald-400' },
+  { path: '/connectors/facebook', label: 'Facebook Ads', icon: Facebook, color: 'text-blue-400' },
+  { path: '/connectors/google', label: 'Google Ads', icon: BarChart3, color: 'text-amber-400' },
+  { path: '/connectors', label: 'Manage Connectors', icon: Link, color: 'text-slate-300' },
+]
+
 export function RootLayout() {
   const location = useLocation()
+  const [dataHubOpen, setDataHubOpen] = useState(false)
   const role =
     apiClient.getStoredUser()?.role ??
     (typeof window !== 'undefined' ? window.localStorage.getItem('userRole') : null)
   const isAdmin = role === 'admin'
   const filteredNavItems = sidebarRouteConfigs.filter((item) => !item.adminOnly || isAdmin)
+
+  const isDataHubActive = dataHubItems.some((item) => location.pathname === item.path)
 
   return (
     <div className="flex h-screen bg-slate-950 text-slate-100">
@@ -35,27 +55,77 @@ export function RootLayout() {
         {/* Navigation */}
         <nav className="flex-1 p-4 overflow-y-auto">
           <ul className="space-y-1">
-            {filteredNavItems.map((item) => {
-              const Icon = item.icon
-              const itemPath = `/${item.path}`
-              const isActive = location.pathname === itemPath
+            {/* Regular nav items (excluding connectors which is in Data Hub) */}
+            {filteredNavItems
+              .filter((item) => item.path !== 'connectors')
+              .map((item) => {
+                const Icon = item.icon
+                const itemPath = `/${item.path}`
+                const isActive = location.pathname === itemPath
 
-              return (
-                <li key={itemPath}>
-                  <Link
-                    to={itemPath}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
-                      isActive
-                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                        : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
-                    }`}
-                  >
-                    <Icon className="w-5 h-5" />
-                    <span className="font-medium">{item.label}</span>
-                  </Link>
-                </li>
-              )
-            })}
+                return (
+                  <li key={itemPath}>
+                    <Link
+                      to={itemPath}
+                      className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+                        isActive
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
+                      }`}
+                    >
+                      <Icon className="w-5 h-5" />
+                      <span className="font-medium">{item.label}</span>
+                    </Link>
+                  </li>
+                )
+              })}
+
+            {/* Data Hub Dropdown */}
+            <li className="mt-2">
+              <button
+                onClick={() => setDataHubOpen(!dataHubOpen)}
+                className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all ${
+                  isDataHubActive
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                    : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Database className="w-5 h-5" />
+                  <span className="font-medium">Data Hub</span>
+                </div>
+                {dataHubOpen ? (
+                  <ChevronDown className="w-4 h-4" />
+                ) : (
+                  <ChevronRight className="w-4 h-4" />
+                )}
+              </button>
+
+              {/* Dropdown items */}
+              {dataHubOpen && (
+                <ul className="mt-1 ml-4 pl-4 border-l border-slate-800 space-y-1">
+                  {dataHubItems.map((item) => {
+                    const Icon = item.icon
+                    const isActive = location.pathname === item.path
+                    return (
+                      <li key={item.path}>
+                        <Link
+                          to={item.path}
+                          className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
+                            isActive
+                              ? 'bg-emerald-500/10 text-emerald-400 font-medium'
+                              : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                          }`}
+                        >
+                          <Icon className={`w-4 h-4 ${item.color}`} />
+                          <span>{item.label}</span>
+                        </Link>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </li>
           </ul>
         </nav>
 
@@ -72,7 +142,7 @@ export function RootLayout() {
         {/* Top Header Bar */}
         <header className="h-16 bg-slate-900/50 border-b border-slate-800 flex items-center justify-between px-6 shrink-0">
           <div className="flex items-center gap-2 text-sm text-slate-500">
-            <span className="capitalize">{location.pathname.split('/')[1] || 'dashboard'}</span>
+            <span className="capitalize">{location.pathname.split('/').pop() || 'dashboard'}</span>
           </div>
           <div className="flex items-center gap-4">
             <ProfileDropdown />

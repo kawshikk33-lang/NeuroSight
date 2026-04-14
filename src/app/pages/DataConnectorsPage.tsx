@@ -276,14 +276,16 @@ export function DataConnectorsPage() {
   const selectedDef = CONNECTOR_DEFS.find((d) => d.type === selectedType)
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
+    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-6">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-100">Data Connectors</h1>
-        <p className="text-slate-400 mt-1">
+      <div>
+        <h2 className="text-lg font-semibold text-slate-100">Data Connectors</h2>
+        <p className="text-sm text-slate-400 mt-1">
           Connect your data sources for automatic analytics — no CSV uploads needed
         </p>
       </div>
+
+      <div className="border-b border-slate-800" />
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">

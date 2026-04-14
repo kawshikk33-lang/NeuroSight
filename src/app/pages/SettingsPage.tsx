@@ -1,6 +1,7 @@
-import { User, Lock, Bell, Palette, Save, CheckCircle2 } from 'lucide-react'
+import { User, Lock, Bell, Palette, Save, CheckCircle2, Link } from 'lucide-react'
 import { useState } from 'react'
 
+import { DataConnectorsPage } from './DataConnectorsPage'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
@@ -15,7 +16,7 @@ import { Separator } from '../components/ui/separator'
 import { Switch } from '../components/ui/switch'
 import { apiClient } from '../services/api/client'
 
-type TabKey = 'profile' | 'security' | 'notifications' | 'preferences'
+type TabKey = 'profile' | 'security' | 'notifications' | 'connectors' | 'preferences'
 
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('profile')
@@ -65,6 +66,7 @@ export function SettingsPage() {
   const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
     { key: 'profile', label: 'Profile', icon: User },
     { key: 'security', label: 'Security', icon: Lock },
+    { key: 'connectors', label: 'Integrations', icon: Link },
     { key: 'notifications', label: 'Notifications', icon: Bell },
     { key: 'preferences', label: 'Preferences', icon: Palette },
   ]
@@ -271,6 +273,9 @@ export function SettingsPage() {
               </Button>
             </div>
           )}
+
+          {/* Integrations Tab */}
+          {activeTab === 'connectors' && <DataConnectorsPage />}
 
           {/* Preferences Tab */}
           {activeTab === 'preferences' && (

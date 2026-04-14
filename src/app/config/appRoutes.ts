@@ -1,4 +1,4 @@
-import { BarChart3, Cpu, LayoutDashboard, Settings, TrendingUp, Users, Link } from 'lucide-react'
+import { BarChart3, Cpu, LayoutDashboard, Settings, TrendingUp, Users } from 'lucide-react'
 
 import { AdminOnlyRoute } from '../components/auth/AdminOnlyRoute'
 import { AnalyticsPage } from '../pages/AnalyticsPage'
@@ -47,12 +47,6 @@ export const appRouteConfigs: AppRouteConfig[] = [
     label: 'Models',
     icon: Cpu,
     Component: ModelsPage,
-  },
-  {
-    path: 'connectors',
-    label: 'Data Connectors',
-    icon: Link,
-    Component: () => null, // Rendered via route directly
   },
   {
     path: 'admin/portal',

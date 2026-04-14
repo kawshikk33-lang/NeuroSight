@@ -7,7 +7,6 @@ import { AdminPage } from './pages/AdminPage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
 import { AuthPage } from './pages/AuthPage'
 import { DashboardPage } from './pages/DashboardPage'
-import { DataConnectorsPage } from './pages/DataConnectorsPage'
 import { ForecastPage } from './pages/ForecastPage'
 import { LandingPage } from './pages/LandingPage'
 import { ModelsPage } from './pages/ModelsPage'
@@ -33,7 +32,6 @@ export const router = createBrowserRouter([
       { path: 'rfmq', element: eb(RFMQPage) },
       { path: 'analytics', element: eb(AnalyticsPage) },
       { path: 'models', element: eb(ModelsPage) },
-      { path: 'connectors', element: eb(DataConnectorsPage) },
       { path: 'settings', element: eb(SettingsPage) },
       {
         path: 'admin/portal',
