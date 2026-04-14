@@ -5,9 +5,9 @@ from fastapi.testclient import TestClient
 class TestDashboardKPIs:
     """Test GET /api/v1/dashboard/kpis."""
 
-    def test_get_kpis(self, client):
+    def test_get_kpis(self, client, auth_headers, mock_supabase_client, test_user):
         """Test KPI endpoint returns data."""
-        response = client.get("/api/v1/dashboard/kpis")
+        response = client.get("/api/v1/dashboard/kpis", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
         # Should return mock KPI data
