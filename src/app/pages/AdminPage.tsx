@@ -10,13 +10,11 @@ import {
   Trash2,
   FileText,
   Shield,
-  Bell,
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { AuditTrailPage } from '../components/shared/AuditTrailPage'
 import { FileUploadComponent } from '../components/shared/FileUploadComponent'
-import { SmartAlertsPage } from '../components/shared/SmartAlertsPage'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
@@ -31,7 +29,7 @@ import { apiClient } from '../services/api/client'
 import { mockDatasets, mockFeatures } from '../utils/mockData'
 
 export function AdminPage() {
-  const [adminTab, setAdminTab] = useState<'admin' | 'audit' | 'alerts'>('admin')
+  const [adminTab, setAdminTab] = useState<'admin' | 'audit'>('admin')
   const [isTraining, setIsTraining] = useState(false)
   const [newFeatureFormula, setNewFeatureFormula] = useState('')
   const [datasets, setDatasets] = useState(mockDatasets)
@@ -265,9 +263,7 @@ export function AdminPage() {
             <p className="text-slate-400">
               {adminTab === 'admin'
                 ? 'System control for datasets, model training, and feature engineering'
-                : adminTab === 'audit'
-                  ? 'Security monitoring, compliance reporting, and GDPR management'
-                  : 'Threshold monitoring, anomaly detection, and real-time notifications'}
+                : 'Security monitoring, compliance reporting, and GDPR management'}
             </p>
           </div>
           {/* Tab Toggle */}
@@ -294,25 +290,12 @@ export function AdminPage() {
               <Shield className="w-4 h-4" />
               Audit & Compliance
             </button>
-            <button
-              onClick={() => setAdminTab('alerts')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                adminTab === 'alerts'
-                  ? 'bg-emerald-500/20 text-emerald-400'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Bell className="w-4 h-4" />
-              Smart Alerts
-            </button>
           </div>
         </div>
       </div>
 
       {adminTab === 'audit' ? (
         <AuditTrailPage />
-      ) : adminTab === 'alerts' ? (
-        <SmartAlertsPage />
       ) : (
         <>
           {/* File Upload Component */}

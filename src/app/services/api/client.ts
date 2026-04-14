@@ -53,6 +53,10 @@ function clearAuthOnUnauthorized() {
   window.localStorage.removeItem(AUTH_USER_KEY)
   window.localStorage.removeItem('userRole')
   window.localStorage.removeItem('isAdmin')
+
+  if (window.location.pathname !== '/login') {
+    window.location.href = '/login'
+  }
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
