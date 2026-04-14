@@ -121,8 +121,8 @@ const mockTables = [
 interface DashboardConnector {
   type: string
   status: string
-  last_sync?: string
-  config?: Record<string, string>
+  last_sync: string | null
+  config?: Record<string, unknown>
 }
 
 export function DatabaseDashboardPage() {
@@ -134,7 +134,7 @@ export function DatabaseDashboardPage() {
       .getConnectors()
       .then((connectors) => {
         const db = connectors.find((c) => c.type === 'database')
-        setConnector(db)
+        setConnector(db ?? null)
         setLoading(false)
       })
       .catch(() => setLoading(false))

@@ -285,6 +285,57 @@ export const apiClient = {
       method: 'POST',
       body: JSON.stringify({ dataset_id: datasetId, mappings, ...range }),
     }),
+  getConnectorTables: (connectorId: string) =>
+    request<{ tables: string[] }>(`/rfmq/connector-tables/${connectorId}`),
+  getConnectorColumns: (connectorId: string, tableName: string) =>
+    request<{ columns: string[] }>(`/rfmq/connector-columns/${connectorId}/${tableName}`),
+  analyzeRfmqFromConnector: (
+    connectorId: string,
+    tableName: string,
+    mappings: Record<string, string>,
+    range: {
+      range_type: 'last_1_month' | 'last_3_months' | 'last_6_months' | 'last_1_year' | 'custom'
+      start_date?: string | null
+      end_date?: string | null
+    }
+  ) =>
+    request<{
+      job_id: string
+      status: string
+      message: string
+      analysis_period: string
+      customers_analyzed: number
+      transactions_analyzed: number
+      range_type: 'last_1_month' | 'last_3_months' | 'last_6_months' | 'last_1_year' | 'custom'
+      start_date?: string | null
+      end_date?: string | null
+      comparison?: {
+        available: boolean
+        compare_label: string
+        active_customers_delta_pct: number | null
+        churn_reduction_pct: number | null
+        current_active_customers: number
+        previous_active_customers: number
+      } | null
+      segments: Array<{ segment: string; count: number; percentage: number; color?: string }>
+      customers: Array<{
+        id: number
+        name: string
+        recency: number
+        frequency: number
+        monetary: number
+        quantity: number
+        segment: string
+      }>
+    }>('/rfmq/analyze-from-connector', {
+      method: 'POST',
+      body: JSON.stringify({
+        connector_id: connectorId,
+        table_name: tableName,
+        mappings,
+        ...range,
+      }),
+    }),
   generateForecast: (payload: {
     forecast_type: 'monthly' | 'quarterly' | 'yearly'
     horizon: number

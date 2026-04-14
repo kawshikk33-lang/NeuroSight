@@ -38,11 +38,29 @@ import { apiClient } from '../services/api/client'
 
 type ConnectorType = 'database' | 'facebook_ads' | 'google_ads'
 
+function isConnectorType(type: string): type is ConnectorType {
+  return type === 'database' || type === 'facebook_ads' || type === 'google_ads'
+}
+
+type ConnectorStatus = 'connected' | 'error' | 'syncing' | 'disconnected'
+
+function normalizeConnectorStatus(status: string): ConnectorStatus {
+  switch (status) {
+    case 'connected':
+    case 'error':
+    case 'syncing':
+    case 'disconnected':
+      return status
+    default:
+      return 'disconnected'
+  }
+}
+
 interface Connector {
   id: string
   type: ConnectorType
   name: string
-  status: 'connected' | 'error' | 'syncing' | 'disconnected'
+  status: ConnectorStatus
   last_sync: string | null
   sync_frequency: string
   config: Record<string, unknown>
@@ -187,7 +205,20 @@ export function DataConnectorsPage() {
   const loadConnectors = useCallback(() => {
     apiClient
       .getConnectors()
-      .then(setConnectors)
+      .then((rows) => {
+        setConnectors(
+          rows.flatMap((c) => {
+            if (!isConnectorType(c.type)) return []
+            return [
+              {
+                ...c,
+                type: c.type,
+                status: normalizeConnectorStatus(c.status),
+              },
+            ]
+          })
+        )
+      })
       .catch(() => setConnectors([]))
   }, [])
 

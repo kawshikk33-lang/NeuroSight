@@ -38,12 +38,18 @@ import { apiClient } from '../services/api/client'
 import { processSegmentDistribution, processTimeSeriesForecast } from '../utils/dataProcessing'
 import { mockTimeSeriesForecast, mockRFMQSegments, mockRecentActivity } from '../utils/mockData'
 
+type ConnectorSummary = {
+  type: string
+  status: string
+  last_sync?: string | null
+}
+
 export function DashboardPage() {
   const [activeTab, setActiveTab] = useState<'overview' | 'alerts'>('overview')
   const [forecastSeries, setForecastSeries] = useState(mockTimeSeriesForecast)
   const [segments, setSegments] = useState(mockRFMQSegments)
   const [activity, setActivity] = useState(mockRecentActivity)
-  const [connectors, setConnectors] = useState<unknown[]>([])
+  const [connectors, setConnectors] = useState<ConnectorSummary[]>([])
 
   useEffect(() => {
     // Fetch connector status
@@ -123,7 +129,7 @@ export function DashboardPage() {
             if (activityRes?.length) {
               setActivity(
                 activityRes.map((item, idx) => ({
-                  id: idx + 1,
+                  id: String(idx + 1),
                   action: item.action ?? item.title ?? 'Activity',
                   time: item.time,
                   type: item.type ?? 'info',

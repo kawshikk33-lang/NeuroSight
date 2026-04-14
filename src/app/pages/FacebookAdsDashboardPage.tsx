@@ -107,8 +107,8 @@ const mockInsights = [
 interface DashboardConnector {
   type: string
   status: string
-  last_sync?: string
-  config?: Record<string, string>
+  last_sync: string | null
+  config?: Record<string, unknown>
 }
 
 export function FacebookAdsDashboardPage() {
@@ -120,7 +120,7 @@ export function FacebookAdsDashboardPage() {
       .getConnectors()
       .then((connectors) => {
         const fb = connectors.find((c) => c.type === 'facebook_ads')
-        setConnector(fb)
+        setConnector(fb ?? null)
         setLoading(false)
       })
       .catch(() => setLoading(false))
@@ -173,7 +173,7 @@ export function FacebookAdsDashboardPage() {
             </h1>
             <p className="text-sm text-slate-400 mt-1">
               {connector
-                ? `Account: ${connector.config?.ad_account_id || 'N/A'}`
+                ? `Account: ${String(connector.config?.ad_account_id ?? 'N/A')}`
                 : 'Connect your Facebook ad account'}
             </p>
           </div>

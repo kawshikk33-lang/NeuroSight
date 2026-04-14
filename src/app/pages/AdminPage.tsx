@@ -28,6 +28,13 @@ import {
 import { apiClient } from '../services/api/client'
 import { mockDatasets, mockFeatures } from '../utils/mockData'
 
+type DatasetStatus = 'active' | 'archived'
+
+function normalizeDatasetStatus(status: string): DatasetStatus {
+  const s = status.toLowerCase()
+  return s === 'archived' ? 'archived' : 'active'
+}
+
 export function AdminPage() {
   const [adminTab, setAdminTab] = useState<'admin' | 'audit'>('admin')
   const [isTraining, setIsTraining] = useState(false)
@@ -99,7 +106,7 @@ export function AdminPage() {
           size: `${(f.size / 1024).toFixed(1)} KB`,
           columns: f.columns,
           uploadDate: new Date(f.uploadDate).toLocaleDateString(),
-          status: f.status,
+          status: normalizeDatasetStatus(f.status),
         }))
       )
       const nextSelected = uploadedFiles.some((file) => file.id === selectedDataset)

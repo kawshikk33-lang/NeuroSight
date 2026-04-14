@@ -1,4 +1,5 @@
 import csv
+import logging
 from datetime import datetime, timedelta
 from io import StringIO
 
@@ -6,16 +7,20 @@ import pandas as pd
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.analysis_history import AnalysisHistory
+from app.models.data_connector import DataConnector
 from app.models.user import User
 from app.services.audit_logger import AuditLogger
 from app.services.data_storage_service import DataStorageService
 from app.services.ml_service import parse_csv_bytes, train_rfmq_model
 from app.tasks.jobs import rfmq_analyze_task
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -35,6 +40,15 @@ class MappingPayload(BaseModel):
 
 
 class AnalyzePayload(MappingPayload):
+    range_type: str = "last_3_months"
+    start_date: str | None = None
+    end_date: str | None = None
+
+
+class ConnectorAnalyzePayload(BaseModel):
+    connector_id: str
+    table_name: str
+    mappings: dict[str, str]
     range_type: str = "last_3_months"
     start_date: str | None = None
     end_date: str | None = None
@@ -587,3 +601,207 @@ async def train(file: UploadFile = File(...)):
 @router.get("/models")
 def rfmq_models():
     return [{"model_id": "rfmq-kmeans-v1", "status": "active"}]
+
+
+# ---------------------------------------------------------------------------
+# Connector-based RFMQ analysis endpoints
+# ---------------------------------------------------------------------------
+
+def _build_engine_url(config: dict) -> str:
+    """Build a SQLAlchemy connection string from connector config."""
+    db_type = config.get("db_type", "PostgreSQL")
+    host = config.get("host", "")
+    port = config.get("port", 5432 if db_type == "PostgreSQL" else 3306)
+    database = config.get("database", "")
+    username = config.get("username", "")
+    password = config.get("password", "")
+    if db_type == "PostgreSQL":
+        return f"postgresql+psycopg2://{username}:{password}@{host}:{port}/{database}"
+    return f"mysql+pymysql://{username}:{password}@{host}:{port}/{database}"
+
+
+def _get_user_db_connector(connector_id: str, db: Session, user: User) -> DataConnector:
+    """Fetch a database connector belonging to the current user."""
+    connector = (
+        db.query(DataConnector)
+        .filter(
+            DataConnector.id == connector_id,
+            DataConnector.user_id == user.id,
+            DataConnector.connector_type == "database",
+        )
+        .first()
+    )
+    if not connector:
+        raise HTTPException(status_code=404, detail="Database connector not found")
+    if connector.status != "connected":
+        raise HTTPException(status_code=400, detail="Database connector is not in connected state")
+    return connector
+
+
+@router.get("/connector-tables/{connector_id}")
+def list_connector_tables(
+    connector_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List tables from a connected database for RFMQ column selection."""
+    connector = _get_user_db_connector(connector_id, db, current_user)
+    try:
+        engine = create_engine(
+            _build_engine_url(connector.config),
+            connect_args={"connect_timeout": 15},
+        )
+        db_type = connector.config.get("db_type", "PostgreSQL")
+        with engine.connect() as conn:
+            if db_type == "PostgreSQL":
+                rows = conn.execute(
+                    text("SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename")
+                ).fetchall()
+            else:
+                rows = conn.execute(text("SHOW TABLES")).fetchall()
+        engine.dispose()
+        return {"tables": [r[0] for r in rows]}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to list tables: {exc}") from exc
+
+
+@router.get("/connector-columns/{connector_id}/{table_name}")
+def list_connector_columns(
+    connector_id: str,
+    table_name: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List column names for a specific table in a connected database."""
+    connector = _get_user_db_connector(connector_id, db, current_user)
+    try:
+        engine = create_engine(
+            _build_engine_url(connector.config),
+            connect_args={"connect_timeout": 15},
+        )
+        db_type = connector.config.get("db_type", "PostgreSQL")
+        with engine.connect() as conn:
+            if db_type == "PostgreSQL":
+                rows = conn.execute(
+                    text(
+                        "SELECT column_name FROM information_schema.columns "
+                        "WHERE table_schema = 'public' AND table_name = :tbl "
+                        "ORDER BY ordinal_position"
+                    ),
+                    {"tbl": table_name},
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    text(f"SHOW COLUMNS FROM `{table_name}`")
+                ).fetchall()
+        engine.dispose()
+        columns = [r[0] for r in rows]
+        if not columns:
+            raise HTTPException(status_code=404, detail=f"Table '{table_name}' not found or has no columns")
+        return {"columns": columns}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to list columns: {exc}") from exc
+
+
+@router.post("/analyze-from-connector")
+async def analyze_from_connector(
+    request: Request,
+    payload: ConnectorAnalyzePayload,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Run RFMQ analysis directly from a connected database table."""
+    connector = _get_user_db_connector(payload.connector_id, db, current_user)
+
+    # Pull the full table into a DataFrame
+    try:
+        engine = create_engine(
+            _build_engine_url(connector.config),
+            connect_args={"connect_timeout": 30},
+        )
+        df = pd.read_sql_table(payload.table_name, engine)
+        engine.dispose()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to read table '{payload.table_name}': {exc}",
+        ) from exc
+
+    if df.empty:
+        raise HTTPException(status_code=400, detail="The selected table has no data")
+
+    # Run the same analysis pipeline used for CSV uploads
+    try:
+        segments, customers, analysis_meta = _analyze_from_dataframe(
+            df,
+            payload.mappings,
+            range_type=payload.range_type,
+            start_date=payload.start_date,
+            end_date=payload.end_date,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    # Persist to analysis history
+    history_entry = AnalysisHistory(
+        user_id=current_user.id,
+        file_id=f"connector:{payload.connector_id}:{payload.table_name}",
+        type="rfmq",
+        input_config={
+            "source": "database_connector",
+            "connector_id": payload.connector_id,
+            "table_name": payload.table_name,
+            "mappings": payload.mappings,
+            "range_type": payload.range_type,
+            "start_date": payload.start_date,
+            "end_date": payload.end_date,
+        },
+        result_data={
+            "segments": segments,
+            "customers": customers,
+            **analysis_meta,
+        },
+    )
+    db.add(history_entry)
+    db.commit()
+
+    AuditLogger.log(
+        db=db,
+        request=request,
+        user=current_user,
+        event_type="analysis_run",
+        action="execute",
+        description=(
+            f"RFMQ analysis from DB connector {connector.name} / {payload.table_name}: "
+            f"{len(customers)} customers, {len(segments)} segments"
+        ),
+        resource_type="analysis",
+        resource_name=f"RFMQ - connector:{payload.connector_id}",
+        status_code=200,
+        metadata={
+            "connector_id": payload.connector_id,
+            "table_name": payload.table_name,
+            "range_type": payload.range_type,
+            "customers": len(customers),
+        },
+    )
+
+    job_id = f"rfmq-connector-{len(customers)}"
+    try:
+        background_tasks.add_task(rfmq_analyze_task, job_id)
+    except Exception as exc:
+        logger.warning("Background task failed: %s", exc)
+
+    return {
+        "job_id": job_id,
+        "status": "started",
+        "segments": segments,
+        "customers": customers,
+        **analysis_meta,
+        "message": "RFMQ analysis from database completed",
+    }

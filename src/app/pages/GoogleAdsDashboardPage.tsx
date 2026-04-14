@@ -116,8 +116,8 @@ const mockInsights = [
 interface DashboardConnector {
   type: string
   status: string
-  last_sync?: string
-  config?: Record<string, string>
+  last_sync: string | null
+  config?: Record<string, unknown>
 }
 
 export function GoogleAdsDashboardPage() {
@@ -129,7 +129,7 @@ export function GoogleAdsDashboardPage() {
       .getConnectors()
       .then((connectors) => {
         const ga = connectors.find((c) => c.type === 'google_ads')
-        setConnector(ga)
+        setConnector(ga ?? null)
         setLoading(false)
       })
       .catch(() => setLoading(false))
@@ -182,7 +182,7 @@ export function GoogleAdsDashboardPage() {
             </h1>
             <p className="text-sm text-slate-400 mt-1">
               {connector
-                ? `Account: ${connector.config?.customer_id || 'N/A'}`
+                ? `Account: ${String(connector.config?.customer_id ?? 'N/A')}`
                 : 'Connect your Google Ads account'}
             </p>
           </div>

@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Cpu, Activity, Zap, Database } from "lucide-react";
-import { MetricCard } from "../components/shared/MetricCard";
+import { Cpu, Activity, Zap, Database } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Bar,
   BarChart,
@@ -13,122 +12,146 @@ import {
   ResponsiveContainer,
   Cell,
   Legend,
-} from "recharts";
-import { mockModelMetrics, mockFeatureImportance, mockTimeSeriesForecast } from "../utils/mockData";
-import { processModelMetrics, processFeatureImportance, processTimeSeriesForecast } from "../utils/dataProcessing";
-import { apiClient } from "../services/api/client";
+} from 'recharts'
+
+import { MetricCard } from '../components/shared/MetricCard'
+import { apiClient } from '../services/api/client'
+import {
+  processModelMetrics,
+  processFeatureImportance,
+  processTimeSeriesForecast,
+} from '../utils/dataProcessing'
+import { mockModelMetrics, mockFeatureImportance, mockTimeSeriesForecast } from '../utils/mockData'
 
 interface TrainingInfo {
-  dataset_size: number;
-  num_features: number;
-  last_training_date: string;
-  last_training_duration: number;
-  model_name: string;
-  status: string;
+  dataset_size: number
+  num_features: number
+  last_training_date: string
+  last_training_duration: number
+  model_name: string
+  status: string
 }
 
 export function ModelsPage() {
-  const [activeModel, setActiveModel] = useState<{ id: string; task?: string } | null>(null);
-  const [versions, setVersions] = useState<Array<{ id: string; status: string }>>([]);
-  const [metrics, setMetrics] = useState<Record<string, number>>(mockModelMetrics[0] ?? {});
-  const [featureImportance, setFeatureImportance] = useState(mockFeatureImportance);
-  const [accuracySeries, setAccuracySeries] = useState(mockTimeSeriesForecast.filter((d) => d.actual > 0));
-  
-  const [hyperparameters, setHyperparameters] = useState<Record<string, any>>({});
-  const [trainingInfo, setTrainingInfo] = useState<TrainingInfo | null>(null);
+  const [activeModel, setActiveModel] = useState<{ id: string; task?: string } | null>(null)
+  const [versions, setVersions] = useState<Array<{ id: string; status: string }>>([])
+  const [metrics, setMetrics] = useState<Record<string, number>>(() => {
+    const metricsObj: Record<string, number> = {}
+    mockModelMetrics.forEach((m) => {
+      metricsObj[m.name.toLowerCase()] = m.value
+    })
+    return metricsObj
+  })
+  const [featureImportance, setFeatureImportance] = useState(mockFeatureImportance)
+  const [accuracySeries, setAccuracySeries] = useState(
+    mockTimeSeriesForecast.filter((d) => d.actual > 0)
+  )
+
+  const [hyperparameters, setHyperparameters] = useState<Record<string, unknown>>({})
+  const [trainingInfo, setTrainingInfo] = useState<TrainingInfo | null>(null)
 
   useEffect(() => {
     // Try to fetch uploaded data first
-    apiClient.getCombinedData()
+    apiClient
+      .getCombinedData()
       .then((uploadedData) => {
         if (uploadedData.success && uploadedData.data?.length > 0) {
           // Process uploaded data
-          const processedMetrics = processModelMetrics(uploadedData.data);
-          const processedFeatures = processFeatureImportance(uploadedData.data);
-          const processedSeries = processTimeSeriesForecast(uploadedData.data);
+          const processedMetrics = processModelMetrics(uploadedData.data)
+          const processedFeatures = processFeatureImportance(uploadedData.data)
+          const processedSeries = processTimeSeriesForecast(uploadedData.data)
 
           if (processedMetrics.length > 0) {
-            const metricsObj: Record<string, number> = {};
+            const metricsObj: Record<string, number> = {}
             processedMetrics.forEach((m) => {
-              metricsObj[m.name.toLowerCase()] = m.value;
-            });
-            setMetrics(metricsObj);
+              metricsObj[m.name.toLowerCase()] = m.value
+            })
+            setMetrics(metricsObj)
           }
 
           if (processedFeatures.length > 0) {
-            setFeatureImportance(processedFeatures);
+            setFeatureImportance(processedFeatures)
           }
 
           if (processedSeries.length > 0) {
-            setAccuracySeries(processedSeries.filter((d) => d.actual > 0));
+            setAccuracySeries(processedSeries.filter((d) => d.actual > 0))
           }
 
           // Fall back gracefully for params
-          throw new Error("No uploaded data overrides needed for dynamic MLflow run data.");
+          throw new Error('No uploaded data overrides needed for dynamic MLflow run data.')
         }
-        throw new Error("No uploaded data");
+        throw new Error('No uploaded data')
       })
       .catch(() => {
         // Fallback to original API endpoints (dynamic from MLflow!)
         Promise.all([
-          apiClient.get<{ id: string; task?: string }>("/models/active"),
-          apiClient.get<Array<{ id: string; status: string }>>("/models/versions"),
-          apiClient.get<Record<string, number>>("/models/metrics"),
-          apiClient.get<Array<{ feature: string; importance: number }>>("/models/feature-importance"),
-          apiClient.get<Array<{ month?: string; value: number }>>("/dashboard/forecast-trend"),
-          apiClient.get<Record<string, any>>("/models/hyperparameters"),
-          apiClient.get<TrainingInfo>("/models/training-info"),
+          apiClient.get<{ id: string; task?: string }>('/models/active'),
+          apiClient.get<Array<{ id: string; status: string }>>('/models/versions'),
+          apiClient.get<Record<string, number>>('/models/metrics'),
+          apiClient.get<Array<{ feature: string; importance: number }>>(
+            '/models/feature-importance'
+          ),
+          apiClient.get<Array<{ month?: string; value: number }>>('/dashboard/forecast-trend'),
+          apiClient.get<Record<string, unknown>>('/models/hyperparameters'),
+          apiClient.get<TrainingInfo>('/models/training-info'),
         ])
-          .then(([activeRes, versionsRes, metricsRes, featureRes, trendRes, paramsRes, infoRes]) => {
-            setActiveModel(activeRes);
-            setVersions(versionsRes);
-            setMetrics(metricsRes);
-            setHyperparameters(paramsRes || {});
-            setTrainingInfo(infoRes);
-            
-            if (featureRes?.length) {
-              setFeatureImportance(featureRes);
+          .then(
+            ([activeRes, versionsRes, metricsRes, featureRes, trendRes, paramsRes, infoRes]) => {
+              setActiveModel(activeRes)
+              setVersions(versionsRes)
+              setMetrics(metricsRes)
+              setHyperparameters(paramsRes || {})
+              setTrainingInfo(infoRes)
+
+              if (featureRes?.length) {
+                setFeatureImportance(featureRes)
+              }
+              if (trendRes?.length) {
+                setAccuracySeries(
+                  trendRes.map((item, idx) => ({
+                    month: item.month ?? `M${idx + 1}`,
+                    actual: item.value,
+                    forecast: item.value * 1.03,
+                  }))
+                )
+              }
             }
-            if (trendRes?.length) {
-              setAccuracySeries(
-                trendRes.map((item, idx) => ({
-                  month: item.month ?? `M${idx + 1}`,
-                  actual: item.value,
-                  forecast: item.value * 1.03,
-                }))
-              );
-            }
-          })
+          )
           .catch(() => {
             // Keep mock fallback.
-          });
-      });
-  }, []);
+          })
+      })
+  }, [])
 
-  const activeModelName = useMemo(() => activeModel?.id ?? "Sales Forecasting Engine v2.1", [activeModel]);
-  
+  const activeModelName = useMemo(
+    () => activeModel?.id ?? 'Sales Forecasting Engine v2.1',
+    [activeModel]
+  )
+
   // Prepare Hyperparameter list
-  const paramsList = Object.entries(hyperparameters).map(([key, value]) => ({
-    name: key,
-    value: String(value)
-  })).slice(0, 6); // Just show top 6 if there are many
+  const paramsList = Object.entries(hyperparameters)
+    .map(([key, value]) => ({
+      name: key,
+      value: String(value),
+    }))
+    .slice(0, 6) // Just show top 6 if there are many
 
   const defaultParams = [
-    { name: "n_estimators", value: "300" },
-    { name: "max_depth", value: "12" },
-    { name: "learning_rate", value: "0.05" },
-    { name: "subsample", value: "0.8" },
-    { name: "colsample_bytree", value: "0.8" },
-  ];
+    { name: 'n_estimators', value: '300' },
+    { name: 'max_depth', value: '12' },
+    { name: 'learning_rate', value: '0.05' },
+    { name: 'subsample', value: '0.8' },
+    { name: 'colsample_bytree', value: '0.8' },
+  ]
 
-  const displayParams = paramsList.length > 0 ? paramsList : defaultParams;
-  
+  const displayParams = paramsList.length > 0 ? paramsList : defaultParams
+
   // Format dates
-  const trainDate = trainingInfo?.last_training_date 
-    ? new Date(trainingInfo.last_training_date) 
-    : new Date("2026-04-01");
-  const monthDay = trainDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  const year = trainDate.getFullYear();
+  const trainDate = trainingInfo?.last_training_date
+    ? new Date(trainingInfo.last_training_date)
+    : new Date('2026-04-01')
+  const monthDay = trainDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const year = trainDate.getFullYear()
 
   return (
     <div className="p-8">
@@ -144,14 +167,14 @@ export function ModelsPage() {
       <div className="mb-6 bg-slate-900 border border-slate-800 rounded-xl p-6">
         <div className="flex items-start justify-between mb-6">
           <div>
-            <h2 className="text-2xl font-bold text-slate-100 mb-2">
-              {activeModelName}
-            </h2>
+            <h2 className="text-2xl font-bold text-slate-100 mb-2">{activeModelName}</h2>
             <div className="flex items-center gap-4">
               <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                 Active
               </span>
-              <span className="text-sm text-slate-400">{activeModel?.task ?? "Time Series Forecasting"}</span>
+              <span className="text-sm text-slate-400">
+                {activeModel?.task ?? 'Time Series Forecasting'}
+              </span>
             </div>
           </div>
           <div className="w-16 h-16 bg-gradient-to-br from-emerald-400 to-cyan-500 rounded-xl flex items-center justify-center">
@@ -162,12 +185,14 @@ export function ModelsPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="p-4 bg-slate-800/50 rounded-lg">
             <p className="text-xs text-slate-400 mb-1">Dataset Size</p>
-            <p className="text-xl font-bold text-slate-100">{trainingInfo?.dataset_size || "18,542"}</p>
+            <p className="text-xl font-bold text-slate-100">
+              {trainingInfo?.dataset_size || '18,542'}
+            </p>
             <p className="text-xs text-slate-500 mt-1">training samples</p>
           </div>
           <div className="p-4 bg-slate-800/50 rounded-lg">
             <p className="text-xs text-slate-400 mb-1">Features Used</p>
-            <p className="text-xl font-bold text-slate-100">{trainingInfo?.num_features || "15"}</p>
+            <p className="text-xl font-bold text-slate-100">{trainingInfo?.num_features || '15'}</p>
             <p className="text-xs text-slate-500 mt-1">input features</p>
           </div>
           <div className="p-4 bg-slate-800/50 rounded-lg">
@@ -178,7 +203,9 @@ export function ModelsPage() {
           <div className="p-4 bg-slate-800/50 rounded-lg">
             <p className="text-xs text-slate-400 mb-1">Training Time</p>
             <p className="text-xl font-bold text-slate-100">
-              {trainingInfo?.last_training_duration ? `${trainingInfo.last_training_duration.toFixed(2)}s` : "5.8h"}
+              {trainingInfo?.last_training_duration
+                ? `${trainingInfo.last_training_duration.toFixed(2)}s`
+                : '5.8h'}
             </p>
             <p className="text-xs text-slate-500 mt-1">execution time</p>
           </div>
@@ -225,18 +252,14 @@ export function ModelsPage() {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={accuracySeries}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis
-                dataKey="month"
-                stroke="#94a3b8"
-                style={{ fontSize: "12px" }}
-              />
-              <YAxis stroke="#94a3b8" style={{ fontSize: "12px" }} />
+              <XAxis dataKey="month" stroke="#94a3b8" style={{ fontSize: '12px' }} />
+              <YAxis stroke="#94a3b8" style={{ fontSize: '12px' }} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "#1e293b",
-                  border: "1px solid #334155",
-                  borderRadius: "8px",
-                  color: "#f1f5f9",
+                  backgroundColor: '#1e293b',
+                  border: '1px solid #334155',
+                  borderRadius: '8px',
+                  color: '#f1f5f9',
                 }}
               />
               <Legend />
@@ -245,7 +268,7 @@ export function ModelsPage() {
                 dataKey="actual"
                 stroke="#10b981"
                 strokeWidth={3}
-                dot={{ fill: "#10b981", r: 5 }}
+                dot={{ fill: '#10b981', r: 5 }}
                 name="Actual Sales"
               />
               <Line
@@ -253,7 +276,7 @@ export function ModelsPage() {
                 dataKey="forecast"
                 stroke="#06b6d4"
                 strokeWidth={3}
-                dot={{ fill: "#06b6d4", r: 5 }}
+                dot={{ fill: '#06b6d4', r: 5 }}
                 name="Predicted Sales"
               />
             </LineChart>
@@ -269,29 +292,21 @@ export function ModelsPage() {
         </p>
         <div className="h-80" style={{ minHeight: '320px' }}>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={featureImportance}
-              layout="vertical"
-              margin={{ left: 120 }}
-            >
+            <BarChart data={featureImportance} layout="vertical" margin={{ left: 120 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis
-                type="number"
-                stroke="#94a3b8"
-                style={{ fontSize: "12px" }}
-              />
+              <XAxis type="number" stroke="#94a3b8" style={{ fontSize: '12px' }} />
               <YAxis
                 type="category"
                 dataKey="feature"
                 stroke="#94a3b8"
-                style={{ fontSize: "12px" }}
+                style={{ fontSize: '12px' }}
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "#1e293b",
-                  border: "1px solid #334155",
-                  borderRadius: "8px",
-                  color: "#f1f5f9",
+                  backgroundColor: '#1e293b',
+                  border: '1px solid #334155',
+                  borderRadius: '8px',
+                  color: '#f1f5f9',
                 }}
               />
               <Bar dataKey="importance" radius={[0, 8, 8, 0]}>
@@ -300,12 +315,12 @@ export function ModelsPage() {
                     key={`feature-${entry.feature}`}
                     fill={
                       index === 0
-                        ? "#10b981"
+                        ? '#10b981'
                         : index === 1
-                        ? "#06b6d4"
-                        : index === 2
-                        ? "#3b82f6"
-                        : "#8b5cf6"
+                          ? '#06b6d4'
+                          : index === 2
+                            ? '#3b82f6'
+                            : '#8b5cf6'
                     }
                   />
                 ))}
@@ -332,7 +347,10 @@ export function ModelsPage() {
                 className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg"
               >
                 <span className="text-sm text-slate-300">{param.name}</span>
-                <span className="text-sm font-semibold text-emerald-400 truncate max-w-[150px] text-right" title={param.value}>
+                <span
+                  className="text-sm font-semibold text-emerald-400 truncate max-w-[150px] text-right"
+                  title={param.value}
+                >
                   {param.value}
                 </span>
               </div>
@@ -352,7 +370,7 @@ export function ModelsPage() {
             {(versions.length
               ? versions.map((v, idx) => ({
                   version: v.id,
-                  date: idx === 0 ? "Latest" : "Previous",
+                  date: idx === 0 ? 'Latest' : 'Previous',
                   mape: `${(metrics.mape ?? metrics.silhouette ?? 8.2).toFixed(1)}%`,
                   status: v.status,
                 }))
@@ -360,8 +378,8 @@ export function ModelsPage() {
                   {
                     version: activeModelName,
                     date: monthDay,
-                    mape: "8.2%",
-                    status: "active",
+                    mape: '8.2%',
+                    status: 'active',
                   },
                 ]
             ).map((version, id) => (
@@ -371,10 +389,8 @@ export function ModelsPage() {
               >
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-semibold text-slate-100">
-                      {version.version}
-                    </span>
-                    {version.status === "active" && (
+                    <span className="text-sm font-semibold text-slate-100">{version.version}</span>
+                    {version.status === 'active' && (
                       <span className="px-2 py-0.5 rounded text-xs bg-emerald-500/10 text-emerald-400">
                         Active
                       </span>
@@ -382,15 +398,12 @@ export function ModelsPage() {
                   </div>
                   <p className="text-xs text-slate-500">{version.date}</p>
                 </div>
-                <span className="text-sm font-semibold text-cyan-400">
-                  Val: {version.mape}
-                </span>
+                <span className="text-sm font-semibold text-cyan-400">Val: {version.mape}</span>
               </div>
             ))}
           </div>
         </div>
       </div>
     </div>
-  );
+  )
 }
-
